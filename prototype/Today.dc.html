@@ -1,0 +1,606 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>今日 · 时间簿</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button,input{font-family:inherit}
+button{cursor:pointer}
+a{text-decoration:none}
+button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #111827;outline-offset:2px}
+
+/* —— 表面 —— */
+.card{background:#FFFFFF;border:1px solid #E8EAF1;border-radius:20px;
+ box-shadow:0 1px 2px rgba(17,24,39,.04),0 10px 24px -16px rgba(17,24,39,.16);
+ transition:transform .28s cubic-bezier(.2,.8,.2,1),box-shadow .28s,border-color .28s}
+.lift:hover{transform:translateY(-3px);box-shadow:0 2px 4px rgba(17,24,39,.05),0 20px 36px -18px rgba(17,24,39,.26)}
+
+/* —— 按钮：黄色只给"主操作" —— */
+.btn{border:0;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:800;white-space:nowrap;
+ transition:transform .22s cubic-bezier(.2,.8,.2,1),box-shadow .22s,background-color .2s,color .2s}
+.btn:hover{transform:translateY(-2px)}
+.btn:active{transform:translateY(0) scale(.97);transition-duration:.1s}
+.primary{background:#FFD43B;color:#111827;box-shadow:inset 0 1px 0 rgba(255,255,255,.55),0 8px 18px -10px rgba(214,160,0,.9)}
+.primary:hover{background:#FFCC1A;box-shadow:inset 0 1px 0 rgba(255,255,255,.55),0 14px 24px -12px rgba(214,160,0,.95)}
+.dark{background:#111827;color:#FFFFFF}
+.dark:hover{background:#000000}
+.soft{background:#F2F3F7;color:#111827}
+.soft:hover{background:#E9EBF2}
+.go:hover{background:#FFD43B}
+.ghost{background:#FFFFFF;color:#111827;box-shadow:inset 0 0 0 1.5px #E1E4EC}
+.ghost:hover{box-shadow:inset 0 0 0 1.5px #C9CDD8}
+.icon{width:40px;height:40px;border-radius:12px;padding:0}
+
+/* —— 小标签 —— */
+.chip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 11px;border-radius:999px;font-size:13px;font-weight:800;white-space:nowrap}
+.count{display:inline-flex;align-items:center;height:26px;padding:0 10px;border-radius:999px;background:#EEF0F5;color:#4B5263;font-size:13px;font-weight:800}
+
+/* —— 时间线 —— */
+.row{border:0;background:transparent;border-radius:14px;transition:transform .22s cubic-bezier(.2,.8,.2,1),background-color .2s}
+.row:hover{background:#F5F6FA;transform:translateY(-2px)}
+.gap{border:1.5px dashed #FFB38A;background:#FFF7F1;border-radius:14px;transition:transform .22s cubic-bezier(.2,.8,.2,1),background-color .2s}
+.gap:hover{background:#FFEFE3;transform:translateY(-2px)}
+.gapseg{border:0;padding:0;background:repeating-linear-gradient(-45deg,#FFE3D1 0 4px,#FFF6F0 4px 8px);box-shadow:inset 0 0 0 1.5px #FFB38A;transition:filter .2s}
+.gapseg:hover{filter:brightness(.95)}
+.runseg{background-image:repeating-linear-gradient(-45deg,rgba(255,255,255,.4) 0 5px,rgba(255,255,255,0) 5px 10px);background-size:20px 100%;animation:stripes 1s linear infinite}
+
+/* —— 表单 —— */
+.field{height:48px;border:0;border-radius:12px;background:#F5F6FA;box-shadow:inset 0 0 0 1.5px #E1E4EC;padding:0 14px;font-size:20px;font-weight:800;color:#111827;font-variant-numeric:tabular-nums;box-sizing:border-box}
+.field:focus{outline:none;box-shadow:inset 0 0 0 2px #111827;background:#FFFFFF}
+
+@keyframes ping{0%{box-shadow:0 0 0 0 currentColor}80%,100%{box-shadow:0 0 0 8px transparent}}
+@keyframes rise{from{opacity:.001;translate:0 12px}to{opacity:1;translate:0 0}}
+@keyframes pop{from{opacity:0;transform:translateY(16px) scale(.97)}to{opacity:1;transform:none}}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+@keyframes stripes{to{background-position:20px 0}}
+.rise{animation:rise .5s cubic-bezier(.2,.8,.2,1) backwards}
+.live{width:9px;height:9px;border-radius:50%;background:currentColor;animation:ping 1.6s ease-out infinite;flex:none}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+</helmet>
+<div style="min-height:100vh;background:#F6F7FA;color:#111827;font-family:'Plus Jakarta Sans','Noto Sans SC',sans-serif;display:flex;flex-direction:column">
+
+  <header style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px;padding:20px 40px;box-sizing:border-box;width:100%;max-width:1360px;margin:0 auto">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="width:40px;height:40px;border-radius:12px;background:#FFD43B;display:flex;align-items:center;justify-content:center">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111827" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      </div>
+      <div style="font-size:20px;font-weight:800;letter-spacing:-0.01em">时间簿</div>
+    </div>
+    <nav class="card" aria-label="主导航" style="display:flex;gap:2px;border-radius:14px;padding:4px">
+      <a href="Today.dc.html" aria-current="page" class="btn dark" style="height:40px;padding:0 20px;border-radius:10px;font-size:14px">今日</a>
+      <a href="Calendar.dc.html" class="btn" style="height:40px;padding:0 20px;border-radius:10px;font-size:14px;color:#4B5263;background:transparent">日历</a>
+      <a href="Stats.dc.html" class="btn" style="height:40px;padding:0 20px;border-radius:10px;font-size:14px;color:#4B5263;background:transparent">统计</a>
+      <a href="Tags.dc.html" class="btn" style="height:40px;padding:0 20px;border-radius:10px;font-size:14px;color:#4B5263;background:transparent">标签</a>
+    </nav>
+    <button onClick="{{ syncCycle }}" class="btn" title="{{ syncTip }}" aria-label="{{ syncLabel }}：{{ syncTip }}" style="height:34px;padding:0 12px;border-radius:999px;font-size:13px;font-weight:700;background:{{ syncBg }};color:{{ syncFg }};box-shadow:{{ syncRing }}">
+      <span class="{{ syncDotCls }}" style="width:8px;height:8px;border-radius:50%;background:{{ syncDot }};color:{{ syncDot }};flex:none"></span>{{ syncLabel }}
+    </button>
+  </header>
+
+  <main style="flex:1;box-sizing:border-box;width:100%;max-width:1360px;margin:0 auto;padding:4px 40px 64px;display:flex;flex-direction:column;gap:36px">
+
+    <section aria-label="今日概览" style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:20px">
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <h1 style="margin:0;font-size:42px;line-height:1.1;font-weight:800;letter-spacing:-0.02em">周日 <span style="background:linear-gradient(transparent 60%,#FFD43B 60%,#FFD43B 90%,transparent 90%);padding:0 3px">11.15</span></h1>
+        <div style="display:flex;flex-wrap:wrap;gap:10px">
+          <sc-for list="{{ chips }}" as="c" hint-placeholder-count="4">
+            <div class="card lift" style="display:flex;align-items:center;gap:10px;border-radius:14px;padding:10px 14px">
+              <span style="width:10px;height:10px;border-radius:3px;background:{{ c.color }}"></span>
+              <span style="font-size:14px;font-weight:700;color:#4B5263">{{ c.name }}</span>
+              <span style="font-size:15px;font-weight:800;font-variant-numeric:tabular-nums">{{ c.today }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <button onClick="{{ startNew }}" class="btn primary" style="height:56px;padding:0 30px;border-radius:16px;font-size:17px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15a1 1 0 0 0 1.5.9l12-7.5a1 1 0 0 0 0-1.8l-12-7.5A1 1 0 0 0 7 4.5z"/></svg>
+        开始专注
+      </button>
+    </section>
+
+    <section aria-label="待办" style="display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <h2 style="margin:0;font-size:22px;font-weight:800">待办</h2>
+          <span class="count">{{ todoCount }}</span>
+        </div>
+        <form onSubmit="{{ addTodo }}" class="card" style="display:flex;align-items:center;gap:6px;border-radius:14px;padding:4px">
+          <label for="newTodo" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">新待办</label>
+          <input id="newTodo" value="{{ draft }}" onInput="{{ onDraft }}" placeholder="记一件要做的事…" style="width:220px;max-width:50vw;height:40px;border:0;background:transparent;font-size:14px;font-weight:600;color:#111827;padding:0 12px;outline:none">
+          <button type="submit" class="btn dark" style="height:40px;padding:0 18px;border-radius:10px;font-size:14px">添加</button>
+        </form>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px">
+        <sc-for list="{{ todoCards }}" as="d" hint-placeholder-count="4">
+          <div class="card lift rise" style="padding:18px;display:flex;flex-direction:column;gap:10px;opacity:{{ d.opacity }}">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+              <span class="chip" style="background:{{ d.tint }};color:{{ d.ink }}"><span style="width:7px;height:7px;border-radius:50%;background:{{ d.color }}"></span>{{ d.tag }}</span>
+              <button onClick="{{ d.toggle }}" class="btn" aria-label="{{ d.toggleLabel }}" aria-pressed="{{ d.done }}" style="width:30px;height:30px;border-radius:9px;padding:0;background:{{ d.fill }};box-shadow:{{ d.ring }}">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="opacity:{{ d.tick }}"><path d="M5 12l5 5 9-10"/></svg>
+              </button>
+            </div>
+            <div style="font-size:18px;font-weight:800;line-height:1.35;text-decoration:{{ d.deco }}">{{ d.title }}</div>
+            <div style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:#6B7280">
+              <span>{{ d.meta }}</span><span style="width:3px;height:3px;border-radius:50%;background:#C3C7D1"></span><span>已投入 {{ d.spent }}</span>
+            </div>
+            <button class="btn soft go" onClick="{{ d.start }}" style="margin-top:4px;height:42px;border-radius:12px;font-size:14px">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15a1 1 0 0 0 1.5.9l12-7.5a1 1 0 0 0 0-1.8l-12-7.5A1 1 0 0 0 7 4.5z"/></svg>开始这件事</button>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+
+    <section aria-label="专注" style="display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px">
+        <h2 style="margin:0;font-size:22px;font-weight:800">专注</h2>
+        <span class="count">{{ runningCount }} 个进行中</span>
+        <span style="font-size:13px;font-weight:600;color:#6B7280">可以同时开多个</span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start">
+        <div style="flex:1 1 380px;min-width:0;display:flex;flex-direction:column;gap:14px">
+          <sc-if value="{{ noRunning }}" hint-placeholder-val="{{ false }}">
+            <div style="border:1.5px dashed #CDD1DC;border-radius:20px;padding:36px;text-align:center;color:#6B7280;font-size:15px;font-weight:600">现在没有进行中的计时。点「开始专注」，或待办上的「开始这件事」。</div>
+          </sc-if>
+          <sc-for list="{{ timers }}" as="t" hint-placeholder-count="2">
+            <div class="card lift rise" style="background:{{ t.bg }};border:{{ t.border }};padding:22px;display:flex;flex-direction:column;gap:14px">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                <span style="display:flex;align-items:center;gap:10px;min-width:0">
+                  <span class="live" style="color:{{ t.dot }}"></span>
+                  <span class="chip" style="background:#FFFFFF;color:{{ t.ink }};box-shadow:inset 0 0 0 1px {{ t.line }}">{{ t.chip }}</span>
+                </span>
+                <button onClick="{{ t.onPick }}" class="btn" style="height:32px;padding:0 10px;border-radius:9px;background:transparent;color:#4B5263;font-size:13px">{{ t.pickLabel }}</button>
+              </div>
+              <div style="font-size:17px;font-weight:800">{{ t.title }}</div>
+              <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
+                <div style="font-size:52px;font-weight:800;letter-spacing:-0.03em;font-variant-numeric:tabular-nums;line-height:1">{{ t.clock }}</div>
+                <div style="font-size:13px;font-weight:600;color:#6B7280">{{ t.since }} 开始</div>
+              </div>
+              <div style="display:flex;gap:10px">
+                <button class="btn dark" onClick="{{ t.onEnd }}" style="flex:1;height:46px;border-radius:12px;font-size:15px">结束</button>
+                <button class="btn ghost" onClick="{{ t.onCancel }}" style="height:46px;padding:0 20px;border-radius:12px;font-size:15px">取消</button>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div class="card" style="flex:1.35 1 460px;min-width:0;padding:22px;display:flex;flex-direction:column;gap:16px">
+          <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <button onClick="{{ prevDay }}" class="btn ghost icon" aria-label="前一天">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+              <div style="min-width:120px;text-align:center">
+                <div style="font-size:16px;font-weight:800">{{ viewLabel }}</div>
+                <div style="font-size:12px;font-weight:600;color:#6B7280">{{ viewSub }}</div>
+              </div>
+              <button onClick="{{ nextDay }}" class="btn ghost icon" aria-label="后一天" style="opacity:{{ nextOp }}">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+            </div>
+            <button onClick="{{ openNew }}" class="btn primary" style="height:40px;padding:0 16px;border-radius:12px;font-size:14px">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>补记录</button>
+          </div>
+
+          <div>
+            <div style="position:relative;height:28px;border-radius:8px;background:#F0F1F5;overflow:hidden">
+              <sc-for list="{{ gapSegs }}" as="g" hint-placeholder-count="2">
+                <button onClick="{{ g.open }}" class="gapseg" aria-label="{{ g.title }}" title="{{ g.title }}" style="position:absolute;top:0;bottom:0;left:{{ g.left }}%;width:{{ g.width }}%;border-radius:4px"></button>
+              </sc-for>
+              <sc-for list="{{ segs }}" as="g" hint-placeholder-count="4">
+                <div title="{{ g.title }}" class="{{ g.cls }}" style="position:absolute;top:0;bottom:0;left:{{ g.left }}%;width:{{ g.width }}%;background-color:{{ g.color }};border-radius:4px;pointer-events:none"></div>
+              </sc-for>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px;font-weight:700;color:#9CA3AF;font-variant-numeric:tabular-nums"><span>0</span><span>6</span><span>12</span><span>18</span><span>24</span></div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <sc-if value="{{ dayEmpty }}" hint-placeholder-val="{{ false }}">
+              <button onClick="{{ openNew }}" class="gap" style="padding:24px;text-align:center;font-size:14px;font-weight:700;color:#9A3A0A">这天还没有记录 · 点这里补一条</button>
+            </sc-if>
+            <sc-for list="{{ rows }}" as="r" hint-placeholder-count="5">
+              <div>
+                <sc-if value="{{ r.isGap }}" hint-placeholder-val="{{ false }}">
+                  <button onClick="{{ r.open }}" class="gap" style="width:100%;display:flex;align-items:center;gap:12px;padding:9px 12px;text-align:left;color:#111827">
+                    <span style="width:10px;height:10px;border-radius:3px;border:1.5px dashed #F2711C;box-sizing:border-box;flex:none"></span>
+                    <span style="flex:1;min-width:0">
+                      <span style="display:block;font-size:14px;font-weight:700;color:#9A3A0A">没有记录 · {{ r.dur }}</span>
+                      <span style="display:block;font-size:12px;font-weight:600;color:#B9693E;font-variant-numeric:tabular-nums">{{ r.range }}</span>
+                    </span>
+                    <span style="font-size:13px;font-weight:800;color:#C2410C">+ 补上</span>
+                  </button>
+                </sc-if>
+                <sc-if value="{{ r.isRec }}" hint-placeholder-val="{{ true }}">
+                  <button onClick="{{ r.open }}" class="row" aria-label="{{ r.aria }}" style="width:100%;display:flex;align-items:center;gap:12px;padding:9px 12px;text-align:left;color:#111827">
+                    <span class="{{ r.dotCls }}" style="width:10px;height:10px;border-radius:3px;background:{{ r.color }};color:{{ r.color }};flex:none"></span>
+                    <span style="flex:1;min-width:0">
+                      <span style="display:block;font-size:14px;font-weight:700">{{ r.title }}</span>
+                      <span style="display:block;font-size:12px;font-weight:600;color:#6B7280;font-variant-numeric:tabular-nums">{{ r.range }}</span>
+                    </span>
+                    <span style="font-size:14px;font-weight:800;font-variant-numeric:tabular-nums">{{ r.dur }}</span>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="opacity:{{ r.editOp }}"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>
+                  </button>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <sc-if value="{{ pickerOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;background:rgba(17,24,39,.35);animation:fade .2s both;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;z-index:10">
+      <div role="dialog" aria-label="选择标签" class="card" style="animation:pop .3s cubic-bezier(.2,.8,.2,1) both;border-radius:24px;padding:28px;width:100%;max-width:560px;max-height:90vh;overflow:auto;box-sizing:border-box;display:flex;flex-direction:column;gap:18px">
+        <div>
+          <span class="chip" style="background:#FFF6CC;color:#7A5A00"><span class="live" style="color:#E5A800;width:7px;height:7px"></span>计时已经开始</span>
+          <h2 style="margin:10px 0 0;font-size:24px;font-weight:800">这次专注属于？</h2>
+        </div>
+        <sc-for list="{{ pickerGroups }}" as="g" hint-placeholder-count="4">
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="font-size:13px;font-weight:700;color:#6B7280">{{ g.name }}</div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px">
+              <sc-for list="{{ g.tags }}" as="x" hint-placeholder-count="3">
+                <button class="btn" onClick="{{ x.pick }}" style="height:40px;padding:0 16px;border-radius:12px;background:{{ g.tint }};color:{{ g.ink }};font-size:14px">{{ x.name }}</button>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+        <button onClick="{{ skipPick }}" class="btn" style="align-self:flex-start;height:36px;padding:0;background:transparent;color:#4B5263;font-size:14px;text-decoration:underline">稍后再选</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ edOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;background:rgba(17,24,39,.35);animation:fade .2s both;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;z-index:11">
+      <div role="dialog" aria-label="{{ edTitle }}" class="card" style="animation:pop .3s cubic-bezier(.2,.8,.2,1) both;border-radius:24px;padding:28px;width:100%;max-width:600px;max-height:92vh;overflow:auto;box-sizing:border-box;display:flex;flex-direction:column;gap:22px">
+        <div>
+          <h2 style="margin:0;font-size:24px;font-weight:800">{{ edTitle }}</h2>
+          <div style="margin-top:4px;font-size:14px;font-weight:600;color:#6B7280">{{ edHint }}</div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="font-size:13px;font-weight:800;color:#4B5263">做的是什么</div>
+          <sc-for list="{{ edGroups }}" as="g" hint-placeholder-count="4">
+            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+              <span style="width:40px;font-size:12px;font-weight:700;color:#9CA3AF">{{ g.name }}</span>
+              <sc-for list="{{ g.tags }}" as="x" hint-placeholder-count="3">
+                <button class="btn" onClick="{{ x.pick }}" aria-pressed="{{ x.sel }}" style="height:36px;padding:0 12px;border-radius:10px;background:{{ x.bg }};box-shadow:{{ x.ring }};color:{{ x.fg }};font-size:13px;font-weight:700"><span style="width:7px;height:7px;border-radius:50%;background:{{ g.color }}"></span>{{ x.name }}</button>
+              </sc-for>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="font-size:13px;font-weight:800;color:#4B5263">哪一天</div>
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+            <sc-for list="{{ edDays }}" as="q" hint-placeholder-count="3">
+              <button class="btn" onClick="{{ q.pick }}" style="height:38px;padding:0 14px;border-radius:10px;background:{{ q.bg }};color:{{ q.fg }};box-shadow:{{ q.ring }};font-size:13px">{{ q.label }}</button>
+            </sc-for>
+            <label for="edDate" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">日期</label>
+            <input id="edDate" type="date" class="field" value="{{ edDate }}" onInput="{{ onEdDate }}" style="height:38px;font-size:14px;width:170px">
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="font-size:13px;font-weight:800;color:#4B5263">从几点到几点</div>
+          <div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px">
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <label for="edS" style="font-size:12px;font-weight:700;color:#9CA3AF">开始</label>
+              <input id="edS" type="time" class="field" value="{{ edS }}" onInput="{{ onEdS }}" style="width:168px">
+              <div style="display:flex;gap:6px">
+                <button class="btn soft" onClick="{{ sMinus }}" style="flex:1;height:32px;border-radius:9px;font-size:12px">−15 分</button>
+                <button class="btn soft" onClick="{{ sPlus }}" style="flex:1;height:32px;border-radius:9px;font-size:12px">+15 分</button>
+              </div>
+            </div>
+            <div style="padding-top:36px;color:#C3C7D1">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <label for="edE" style="font-size:12px;font-weight:700;color:#9CA3AF">结束 {{ edNext }}</label>
+              <input id="edE" type="time" class="field" value="{{ edE }}" onInput="{{ onEdE }}" style="width:168px">
+              <div style="display:flex;gap:6px">
+                <button class="btn soft" onClick="{{ eMinus }}" style="flex:1;height:32px;border-radius:9px;font-size:12px">−15 分</button>
+                <button class="btn soft" onClick="{{ ePlus }}" style="flex:1;height:32px;border-radius:9px;font-size:12px">+15 分</button>
+              </div>
+            </div>
+            <div style="margin-left:auto;padding-top:22px;text-align:right">
+              <div style="font-size:12px;font-weight:700;color:#9CA3AF">时长</div>
+              <div style="font-size:24px;font-weight:800;font-variant-numeric:tabular-nums">{{ edDur }}</div>
+            </div>
+          </div>
+          <sc-if value="{{ edOverlap }}" hint-placeholder-val="{{ false }}">
+            <div style="font-size:13px;font-weight:600;color:#4B5263;background:#F5F6FA;border-radius:12px;padding:10px 12px">和「{{ edOverlapText }}」有重叠。可以照常保存，同一时间本来就能做两件事。</div>
+          </sc-if>
+        </div>
+
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding-top:4px;border-top:1px solid #EEF0F5">
+          <sc-if value="{{ edIsEdit }}" hint-placeholder-val="{{ false }}">
+            <button onClick="{{ edDelete }}" class="btn" style="height:44px;padding:0 8px;background:transparent;color:#D02246;font-size:14px">删除这条</button>
+          </sc-if>
+          <span style="flex:1"></span>
+          <button onClick="{{ edClose }}" class="btn ghost" style="height:46px;padding:0 20px;border-radius:12px;font-size:15px;margin-top:14px">取消</button>
+          <button onClick="{{ edSave }}" class="btn primary" style="height:46px;padding:0 28px;border-radius:12px;font-size:15px;margin-top:14px;opacity:{{ edSaveOp }}">保存</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1360,"height":1300}}'>
+class Component extends DCLogic {
+  componentDidMount() {
+    const T = '2026-11-15', Y = '2026-11-14', B = '2026-11-13';
+    this._t0 = Date.now();
+    this.setState({
+      timers: [{ id: 'r1', tag: 't4', title: '谷米FDE开发', startedAt: Date.now() - 41 * 60000 }],
+      recs: [
+        { id: 'f1', tag: 't9', date: T, s: 750, e: 966 },
+        { id: 'f2', tag: 't9', date: T, s: 667, e: 695 },
+        { id: 'f3', tag: 't10', date: T, s: 620, e: 669 },
+        { id: 'f4', tag: 't8', date: T, s: 607, e: 621 },
+        { id: 'y1', tag: 't9', date: Y, s: 840, e: 1050 },
+        { id: 'y2', tag: 't11', date: Y, s: 1140, e: 1210 },
+        { id: 'y3', tag: 't6', date: Y, s: 1260, e: 1390 },
+        { id: 'b1', tag: 't2', date: B, s: 570, e: 720 },
+        { id: 'b2', tag: 't1', date: B, s: 810, e: 1090 },
+        { id: 'b3', tag: 't10', date: B, s: 1260, e: 1350 }
+      ],
+      todos: [
+        { id: 1, title: '谷米 FDE 开发', tag: 't4', meta: '截止 今天', done: false, spent: 41 },
+        { id: 2, title: '练习 Python', tag: 't5', meta: '每天重复', done: false, spent: 120 },
+        { id: 3, title: '健身', tag: 't11', meta: '每周一、三、五', done: false, spent: 100 },
+        { id: 4, title: '整理本周工作', tag: 't2', meta: '每周日', done: true, spent: 35 }
+      ],
+      view: T, picker: null, ed: null, seq: 2, tseq: 10, rseq: 1, draft: ''
+    });
+    this._iv = setInterval(() => this.forceUpdate(), 1000);
+  }
+  componentWillUnmount() { clearInterval(this._iv); }
+
+  // 右上角"数据已同步"：断联监控（原型里点击可切换三种状态演示）
+  syncVals() {
+    const st = (this.state && this.state.sync) || 'ok';
+    const S = {
+      ok: { label: '数据已同步', tip: '服务器连接正常，上次保存 17:20', dot: '#14B8A6', bg: 'transparent', fg: '#4B5263', ring: 'none', cls: 'live' },
+      saving: { label: '正在保存…', tip: '正在把刚才的改动写入数据库', dot: '#E5A800', bg: 'transparent', fg: '#4B5263', ring: 'none', cls: 'live' },
+      off: { label: '连接断开 · 2 条待保存', tip: '暂时连不上服务器，改动先存在本机，恢复后自动补传', dot: '#F2711C', bg: '#FFF7F1', fg: '#9A3A0A', ring: 'inset 0 0 0 1.5px #FFB38A', cls: '' }
+    };
+    const v = S[st], order = ['ok', 'saving', 'off'];
+    return { syncLabel: v.label, syncTip: v.tip + '（原型：点击切换演示状态）', syncDot: v.dot, syncBg: v.bg, syncFg: v.fg, syncRing: v.ring, syncDotCls: v.cls,
+      syncCycle: () => this.setState({ sync: order[(order.indexOf(st) + 1) % 3] }) };
+  }
+
+  renderVals() {
+    const s = this.state || {};
+    const TODAY = '2026-11-15';
+    // 模块色：只用于"数据"（标签、时间条）。色 / 浅底 / 深字 三档，饱和度和明度一致
+    const MODS = {
+      '工作': { c: '#4F7BFF', tint: '#EDF1FF', ink: '#2D4FCC', line: '#C9D5FF' },
+      '学习': { c: '#8B5CF6', tint: '#F2EDFF', ink: '#6236D6', line: '#DCCDFF' },
+      '游戏': { c: '#14B8A6', tint: '#E6F7F4', ink: '#0B7F72', line: '#B5E9E1' },
+      '锻炼': { c: '#F43F5E', tint: '#FFEDF0', ink: '#C8203E', line: '#FFC9D2' }
+    };
+    const MK = Object.keys(MODS);
+    const TAGS = [
+      { id: 't1', name: '淘教', mod: '工作' }, { id: 't2', name: '个人工作', mod: '工作' },
+      { id: 't3', name: '行者', mod: '工作' }, { id: 't4', name: '各培训机构合作', mod: '工作' },
+      { id: 't5', name: 'Python', mod: '学习' }, { id: 't6', name: '钻研', mod: '学习' },
+      { id: 't7', name: '异环', mod: '游戏' }, { id: 't8', name: '绝区零', mod: '游戏' },
+      { id: 't9', name: '星穹铁道', mod: '游戏' }, { id: 't10', name: '原神', mod: '游戏' },
+      { id: 't11', name: '健身', mod: '锻炼' }
+    ];
+    const byId = {};
+    TAGS.forEach((t) => { byId[t.id] = t; });
+    const pad = (n) => (n < 10 ? '0' + n : '' + n);
+    const hm = (m) => { m = ((Math.round(m) % 1440) + 1440) % 1440; return pad(Math.floor(m / 60)) + ':' + pad(m % 60); };
+    const toMin = (x) => { if (!x) return null; const p = x.split(':'); return parseInt(p[0], 10) * 60 + parseInt(p[1], 10); };
+    const clock = (ms) => { const t = Math.max(0, Math.floor(ms / 1000)); return pad(Math.floor(t / 3600)) + ':' + pad(Math.floor((t % 3600) / 60)) + ':' + pad(t % 60); };
+    const dur = (m) => (m >= 60 ? Math.floor(m / 60) + ' h ' + (m % 60) + ' min' : m + ' min');
+    const addDays = (d, n) => { const x = new Date(d + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+    const WK = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+    const wk = (d) => WK[new Date(d + 'T12:00:00Z').getUTCDay()];
+    const md = (d) => parseInt(d.slice(5, 7), 10) + '.' + d.slice(8, 10);
+    const rel = (d) => (d === TODAY ? '今天' : d === addDays(TODAY, -1) ? '昨天' : d === addDays(TODAY, -2) ? '前天' : '');
+    const endOf = (r) => (r.e > r.s ? r.e : r.e + 1440);
+
+    // 原型里把"现在"固定从 17:20 起走，用来演示忘了计时留下的空档；正式版用真实时间
+    const now = Date.now();
+    const nowMin = 17 * 60 + 20 + Math.floor((now - (this._t0 || now)) / 60000);
+    const timers = s.timers || [];
+    const todos = s.todos || [];
+    const recs = s.recs || [];
+    const view = s.view || TODAY;
+    const runStart = (t) => nowMin - Math.floor((now - t.startedAt) / 60000);
+
+    const startTimer = (tag, title, open) => {
+      const id = 'r' + (this.state.seq || 2);
+      this.setState({ timers: (this.state.timers || []).concat([{ id, tag, title, startedAt: Date.now() }]), seq: (this.state.seq || 2) + 1, picker: open ? id : null });
+    };
+
+    const mins = {};
+    MK.forEach((k) => { mins[k] = 0; });
+    recs.filter((r) => r.date === TODAY).forEach((r) => { mins[byId[r.tag].mod] += endOf(r) - r.s; });
+    timers.forEach((t) => { if (t.tag) mins[byId[t.tag].mod] += Math.floor((now - t.startedAt) / 60000); });
+
+    const dayRecs = recs.filter((r) => r.date === view);
+    const items = dayRecs.map((r) => ({ kind: 'rec', a: r.s, b: Math.min(endOf(r), 1440), r }));
+    if (view === TODAY) timers.forEach((t) => items.push({ kind: 'run', a: runStart(t), b: nowMin, t }));
+    const ivs = items.map((x) => [x.a, x.b]).sort((p, q) => p[0] - q[0]);
+    const gaps = [];
+    let cur = null;
+    ivs.forEach((iv) => {
+      if (cur === null) { cur = iv[1]; return; }
+      // 只标记两条记录之间 ≥20 分钟的空档；最后一条之后到现在不推测
+      if (iv[0] - cur >= 20) gaps.push([cur, iv[0]]);
+      cur = Math.max(cur, iv[1]);
+    });
+
+    const pct = (m) => (m / 1440 * 100).toFixed(2);
+    const openEd = (o) => this.setState({ ed: o });
+    const gapOpen = (g) => () => openEd({ mode: 'new', tag: null, date: view, s: hm(g[0]), e: hm(g[1]) });
+
+    const segs = items.map((x) => {
+      const tag = x.kind === 'rec' ? byId[x.r.tag] : (x.t.tag ? byId[x.t.tag] : null);
+      return { left: pct(x.a), width: Math.max(0.5, (x.b - x.a) / 1440 * 100).toFixed(2), color: tag ? MODS[tag.mod].c : '#B8BDC9', title: (tag ? tag.name : x.t.title) + ' ' + hm(x.a) + '–' + hm(x.b), cls: x.kind === 'run' ? 'runseg' : '' };
+    });
+    const gapSegs = gaps.map((g) => ({ left: pct(g[0]), width: ((g[1] - g[0]) / 1440 * 100).toFixed(2), title: '没有记录 ' + hm(g[0]) + '–' + hm(g[1]) + '，点击补上', open: gapOpen(g) }));
+
+    const rows = items.map((x) => {
+      if (x.kind === 'run') {
+        const tag = x.t.tag ? byId[x.t.tag] : null;
+        return { k: x.a, isGap: false, isRec: true, title: (tag ? tag.name : x.t.title) + ' · 进行中', range: hm(x.a) + ' – 现在', dur: dur(x.b - x.a), color: tag ? MODS[tag.mod].c : '#B8BDC9', dotCls: 'live', editOp: 0, aria: '进行中的计时', open: () => {} };
+      }
+      const tag = byId[x.r.tag];
+      const r = x.r;
+      return {
+        k: x.a, isGap: false, isRec: true, title: tag.name, color: MODS[tag.mod].c, dotCls: '', editOp: 1,
+        range: hm(r.s) + ' – ' + (r.e > r.s ? '' : '次日 ') + hm(r.e), dur: dur(endOf(r) - r.s),
+        aria: '编辑 ' + tag.name + ' ' + hm(r.s) + ' 到 ' + hm(r.e),
+        open: () => openEd({ mode: 'edit', id: r.id, tag: r.tag, date: r.date, s: hm(r.s), e: hm(r.e) })
+      };
+    }).concat(gaps.map((g) => ({ k: g[0] + 0.5, isGap: true, isRec: false, dur: dur(g[1] - g[0]), range: hm(g[0]) + ' – ' + (view === TODAY && g[1] === nowMin ? '现在' : hm(g[1])), open: gapOpen(g) })))
+      .sort((p, q) => q.k - p.k);
+
+    const ed = s.ed;
+    const setEd = (patch) => this.setState({ ed: Object.assign({}, this.state.ed, patch) });
+    const shift = (key, d) => () => { const v = toMin(this.state.ed[key]); setEd({ [key]: hm((v === null ? nowMin : v) + d) }); };
+    const SEL = 'inset 0 0 0 2px #111827', UNSEL = 'inset 0 0 0 1.5px #E1E4EC';
+    let edV = {};
+    if (ed) {
+      const sm = toMin(ed.s), em = toMin(ed.e);
+      const ok = !!ed.tag && sm !== null && em !== null && em !== sm;
+      const length = ok ? (em > sm ? em - sm : em + 1440 - sm) : 0;
+      const eEnd = sm !== null && em !== null ? (em > sm ? em : em + 1440) : null;
+      const ov = (sm === null || eEnd === null) ? [] : recs.filter((r) => r.date === ed.date && r.id !== ed.id && r.s < eEnd && endOf(r) > sm);
+      edV = {
+        edTitle: ed.mode === 'edit' ? '编辑记录' : '补一条记录',
+        edHint: ed.mode === 'edit' ? '改标签、日期或起止时间都可以，统计会跟着更新' : '忘了点开始也没关系，把那段时间补上就好',
+        edIsEdit: ed.mode === 'edit',
+        edDate: ed.date, edS: ed.s || '', edE: ed.e || '',
+        edNext: sm !== null && em !== null && em < sm ? '· 次日' : '',
+        edDur: ok ? dur(length) : '—',
+        edSaveOp: ok ? 1 : 0.45,
+        edOverlap: ov.length > 0,
+        edOverlapText: ov.map((r) => byId[r.tag].name + ' ' + hm(r.s) + '–' + hm(r.e)).join('、'),
+        edDays: [[TODAY, '今天'], [addDays(TODAY, -1), '昨天'], [addDays(TODAY, -2), '前天']].map((p) => ({
+          label: p[1] + ' ' + md(p[0]),
+          bg: ed.date === p[0] ? '#111827' : '#FFFFFF', fg: ed.date === p[0] ? '#FFFFFF' : '#111827',
+          ring: ed.date === p[0] ? 'none' : UNSEL,
+          pick: () => setEd({ date: p[0] })
+        })),
+        edGroups: MK.map((k) => ({
+          name: k, color: MODS[k].c,
+          tags: TAGS.filter((t) => t.mod === k).map((t) => ({
+            name: t.name, sel: ed.tag === t.id,
+            bg: ed.tag === t.id ? MODS[k].tint : '#FFFFFF',
+            fg: ed.tag === t.id ? MODS[k].ink : '#374151',
+            ring: ed.tag === t.id ? 'inset 0 0 0 2px ' + MODS[k].c : UNSEL,
+            pick: () => setEd({ tag: t.id })
+          }))
+        })),
+        onEdDate: (e) => setEd({ date: e.target.value || this.state.ed.date }),
+        onEdS: (e) => setEd({ s: e.target.value }),
+        onEdE: (e) => setEd({ e: e.target.value }),
+        sMinus: shift('s', -15), sPlus: shift('s', 15), eMinus: shift('e', -15), ePlus: shift('e', 15),
+        edClose: () => this.setState({ ed: null }),
+        edDelete: () => this.setState({ recs: this.state.recs.filter((r) => r.id !== ed.id), ed: null }),
+        edSave: () => {
+          if (!ok) return;
+          const rec = { id: ed.id || ('n' + this.state.rseq), tag: ed.tag, date: ed.date, s: sm, e: em };
+          const list = ed.mode === 'edit' ? this.state.recs.map((r) => (r.id === ed.id ? rec : r)) : this.state.recs.concat([rec]);
+          this.setState({ recs: list, ed: null, rseq: this.state.rseq + 1, view: ed.date });
+        }
+      };
+    }
+
+    const sorted = todos.slice().sort((a, b) => (a.done ? 1 : 0) - (b.done ? 1 : 0));
+    const left = todos.filter((x) => !x.done).length;
+
+    return Object.assign({
+      runningCount: timers.length,
+      noRunning: timers.length === 0,
+      pickerOpen: !!s.picker,
+      edOpen: !!ed,
+      draft: s.draft || '',
+      todoCount: left + ' / ' + todos.length,
+      onDraft: (e) => this.setState({ draft: e.target.value }),
+      addTodo: (e) => {
+        if (e && e.preventDefault) e.preventDefault();
+        const t = (this.state.draft || '').trim();
+        if (!t) return;
+        this.setState({ todos: [{ id: this.state.tseq, title: t, tag: 't2', meta: '今天', done: false, spent: 0 }].concat(this.state.todos), tseq: this.state.tseq + 1, draft: '' });
+      },
+      startNew: () => startTimer(null, '新的专注', true),
+      skipPick: () => this.setState({ picker: null }),
+      viewLabel: md(view) + ' ' + wk(view),
+      viewSub: rel(view) || '‹ › 切换日期',
+      nextOp: view === TODAY ? 0.35 : 1,
+      prevDay: () => this.setState({ view: addDays(this.state.view, -1) }),
+      nextDay: () => { if (this.state.view !== TODAY) this.setState({ view: addDays(this.state.view, 1) }); },
+      openNew: () => {
+        const g = gaps.length ? gaps[gaps.length - 1] : null;
+        openEd(g ? { mode: 'new', tag: null, date: view, s: hm(g[0]), e: hm(g[1]) } : { mode: 'new', tag: null, date: view, s: '', e: '' });
+      },
+      dayEmpty: items.length === 0,
+      segs, gapSegs, rows,
+      chips: MK.map((k) => ({ name: k, color: MODS[k].c, today: mins[k] > 0 ? dur(mins[k]) : '0 min' })),
+      todoCards: sorted.map((d) => {
+        const tag = byId[d.tag];
+        const m = MODS[tag.mod];
+        return {
+          title: d.title, tag: tag.name, color: m.c, tint: m.tint, ink: m.ink, meta: d.meta, spent: dur(d.spent),
+          done: d.done, opacity: d.done ? 0.55 : 1,
+          fill: d.done ? '#111827' : '#FFFFFF', ring: d.done ? 'none' : 'inset 0 0 0 2px #CDD1DC', tick: d.done ? 1 : 0,
+          deco: d.done ? 'line-through' : 'none',
+          toggleLabel: (d.done ? '标为未完成：' : '标为完成：') + d.title,
+          toggle: () => this.setState({ todos: this.state.todos.map((y) => y.id === d.id ? Object.assign({}, y, { done: !y.done }) : y) }),
+          start: () => startTimer(d.tag, d.title, false)
+        };
+      }),
+      timers: timers.map((t) => {
+        const tag = t.tag ? byId[t.tag] : null;
+        const m = tag ? MODS[tag.mod] : null;
+        return {
+          title: t.title,
+          chip: tag ? tag.mod + ' · ' + tag.name : '还没选标签',
+          dot: m ? m.c : '#9CA3AF',
+          ink: m ? m.ink : '#4B5263',
+          line: m ? m.line : '#E1E4EC',
+          bg: m ? m.tint : '#FFFFFF',
+          border: m ? '1px solid ' + m.line : '1.5px dashed #CDD1DC',
+          clock: clock(now - t.startedAt),
+          since: hm(runStart(t)),
+          pickLabel: tag ? '换标签' : '选标签',
+          onPick: () => this.setState({ picker: t.id }),
+          onCancel: () => this.setState({ timers: this.state.timers.filter((x) => x.id !== t.id) }),
+          onEnd: () => {
+            const a = runStart(t);
+            this.setState({
+              timers: this.state.timers.filter((x) => x.id !== t.id),
+              recs: this.state.recs.concat([{ id: 'e' + t.id + Date.now(), tag: t.tag || 't2', date: TODAY, s: a, e: Math.max(a + 1, nowMin) }])
+            });
+          }
+        };
+      }),
+      pickerGroups: MK.map((k) => ({
+        name: k, tint: MODS[k].tint, ink: MODS[k].ink,
+        tags: TAGS.filter((t) => t.mod === k).map((t) => ({
+          name: t.name,
+          pick: () => this.setState({
+            timers: this.state.timers.map((x) => x.id === this.state.picker ? { id: x.id, tag: t.id, title: x.title === '新的专注' ? t.name : x.title, startedAt: x.startedAt } : x),
+            picker: null
+          })
+        }))
+      }))
+    }, edV, this.syncVals());
+  }
+}
+</script>
+</body>
+</html>

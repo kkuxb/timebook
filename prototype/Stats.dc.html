@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>统计 · 时间簿</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button,input{font-family:inherit}
+button{cursor:pointer}
+a{text-decoration:none}
+button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #111827;outline-offset:2px}
+
+/* —— 表面 —— */
+.card{background:#FFFFFF;border:1px solid #E8EAF1;border-radius:20px;
+ box-shadow:0 1px 2px rgba(17,24,39,.04),0 10px 24px -16px rgba(17,24,39,.16);
+ transition:transform .28s cubic-bezier(.2,.8,.2,1),box-shadow .28s,border-color .28s}
+.lift:hover{transform:translateY(-3px);box-shadow:0 2px 4px rgba(17,24,39,.05),0 20px 36px -18px rgba(17,24,39,.26)}
+
+/* —— 按钮：黄色只给"主操作" —— */
+.btn{border:0;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:800;white-space:nowrap;
+ transition:transform .22s cubic-bezier(.2,.8,.2,1),box-shadow .22s,background-color .2s,color .2s}
+.btn:hover{transform:translateY(-2px)}
+.btn:active{transform:translateY(0) scale(.97);transition-duration:.1s}
+.primary{background:#FFD43B;color:#111827;box-shadow:inset 0 1px 0 rgba(255,255,255,.55),0 8px 18px -10px rgba(214,160,0,.9)}
+.primary:hover{background:#FFCC1A;box-shadow:inset 0 1px 0 rgba(255,255,255,.55),0 14px 24px -12px rgba(214,160,0,.95)}
+.dark{background:#111827;color:#FFFFFF}
+.dark:hover{background:#000000}
+.soft{background:#F2F3F7;color:#111827}
+.soft:hover{background:#E9EBF2}
+.go:hover{background:#FFD43B}
+.ghost{background:#FFFFFF;color:#111827;box-shadow:inset 0 0 0 1.5px #E1E4EC}
+.ghost:hover{box-shadow:inset 0 0 0 1.5px #C9CDD8}
+.icon{width:40px;height:40px;border-radius:12px;padding:0}
+
+/* —— 小标签 —— */
+.chip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 11px;border-radius:999px;font-size:13px;font-weight:800;white-space:nowrap}
+.count{display:inline-flex;align-items:center;height:26px;padding:0 10px;border-radius:999px;background:#EEF0F5;color:#4B5263;font-size:13px;font-weight:800}
+
+/* —— 时间线 —— */
+.row{border:0;background:transparent;border-radius:14px;transition:transform .22s cubic-bezier(.2,.8,.2,1),background-color .2s}
+.row:hover{background:#F5F6FA;transform:translateY(-2px)}
+.gap{border:1.5px dashed #FFB38A;background:#FFF7F1;border-radius:14px;transition:transform .22s cubic-bezier(.2,.8,.2,1),background-color .2s}
+.gap:hover{background:#FFEFE3;transform:translateY(-2px)}
+.gapseg{border:0;padding:0;background:repeating-linear-gradient(-45deg,#FFE3D1 0 4px,#FFF6F0 4px 8px);box-shadow:inset 0 0 0 1.5px #FFB38A;transition:filter .2s}
+.gapseg:hover{filter:brightness(.95)}
+.runseg{background-image:repeating-linear-gradient(-45deg,rgba(255,255,255,.4) 0 5px,rgba(255,255,255,0) 5px 10px);background-size:20px 100%;animation:stripes 1s linear infinite}
+
+/* —— 表单 —— */
+.field{height:48px;border:0;border-radius:12px;background:#F5F6FA;box-shadow:inset 0 0 0 1.5px #E1E4EC;padding:0 14px;font-size:20px;font-weight:800;color:#111827;font-variant-numeric:tabular-nums;box-sizing:border-box}
+.field:focus{outline:none;box-shadow:inset 0 0 0 2px #111827;background:#FFFFFF}
+
+@keyframes ping{0%{box-shadow:0 0 0 0 currentColor}80%,100%{box-shadow:0 0 0 8px transparent}}
+@keyframes rise{from{opacity:.001;translate:0 12px}to{opacity:1;translate:0 0}}
+@keyframes pop{from{opacity:0;transform:translateY(16px) scale(.97)}to{opacity:1;transform:none}}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+@keyframes stripes{to{background-position:20px 0}}
+.rise{animation:rise .5s cubic-bezier(.2,.8,.2,1) backwards}
+.live{width:9px;height:9px;border-radius:50%;background:currentColor;animation:ping 1.6s ease-out infinite;flex:none}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+.seg{display:flex;gap:2px;padding:4px;border-radius:14px}
+.bar{transition:filter .2s}
+.bar:hover{filter:brightness(.92)}
+.lrow{border-radius:12px;transition:transform .22s cubic-bezier(.2,.8,.2,1),background-color .2s}
+.lrow:hover{background:#F5F6FA;transform:translateY(-2px)}
+</style>
+</helmet>
+<div style="min-height:100vh;background:#F6F7FA;color:#111827;font-family:'Plus Jakarta Sans','Noto Sans SC',sans-serif;display:flex;flex-direction:column">
+  <header style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px;padding:20px 40px;box-sizing:border-box;width:100%;max-width:1360px;margin:0 auto">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="width:40px;height:40px;border-radius:12px;background:#FFD43B;display:flex;align-items:center;justify-content:center">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111827" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      </div>
+      <div style="font-size:20px;font-weight:800;letter-spacing:-0.01em">时间簿</div>
+    </div>
+    <nav class="card" aria-label="主导航" style="display:flex;gap:2px;border-radius:14px;padding:4px">
+      <a href="Today.dc.html" class="btn" style="height:40px;padding:0 20px;border-radius:10px;font-size:14px;color:#4B5263;background:transparent">今日</a>
+      <a href="Calendar.dc.html" class="btn" style="height:40px;padding:0 20px;border-radius:10px;font-size:14px;color:#4B5263;background:transparent">日历</a>
+      <a href="Stats.dc.html" aria-current="page" class="btn dark" style="height:40px;padding:0 20px;border-radius:10px;font-size:14px">统计</a>
+      <a href="Tags.dc.html" class="btn" style="height:40px;padding:0 20px;border-radius:10px;font-size:14px;color:#4B5263;background:transparent">标签</a>
+    </nav>
+    <button onClick="{{ syncCycle }}" class="btn" title="{{ syncTip }}" aria-label="{{ syncLabel }}：{{ syncTip }}" style="height:34px;padding:0 12px;border-radius:999px;font-size:13px;font-weight:700;background:{{ syncBg }};color:{{ syncFg }};box-shadow:{{ syncRing }}">
+      <span class="{{ syncDotCls }}" style="width:8px;height:8px;border-radius:50%;background:{{ syncDot }};color:{{ syncDot }};flex:none"></span>{{ syncLabel }}
+    </button>
+  </header>
+  <main style="flex:1;box-sizing:border-box;width:100%;max-width:1360px;margin:0 auto;padding:4px 40px 64px;display:flex;flex-direction:column;gap:20px">
+    <section style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px">
+      <div>
+        <h1 style="margin:0;font-size:34px;line-height:1.15;font-weight:800;letter-spacing:-0.02em">统计</h1>
+        <div style="margin-top:6px;font-size:14px;font-weight:600;color:#6B7280">自然日 / 自然周（周一开始）/ 自然月 / 年，实时计算，不用归档</div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px">
+        <div class="card seg" role="tablist" aria-label="统计周期">
+          <sc-for list="{{ periods }}" as="p" hint-placeholder-count="4">
+            <button role="tab" aria-selected="{{ p.on }}" onClick="{{ p.pick }}" class="btn" style="height:38px;padding:0 18px;border-radius:10px;font-size:14px;background:{{ p.bg }};color:{{ p.fg }}">{{ p.label }}</button>
+          </sc-for>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button onClick="{{ prev }}" class="btn ghost icon" aria-label="上一个周期">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+          <div style="min-width:132px;text-align:center;font-size:16px;font-weight:800;font-variant-numeric:tabular-nums">{{ rangeLabel }}</div>
+          <button onClick="{{ next }}" class="btn ghost icon" aria-label="下一个周期" style="opacity:{{ nextOp }}">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+        </div>
+      </div>
+    </section>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px">
+      <div class="card lift" style="padding:18px 20px">
+        <div style="font-size:13px;font-weight:700;color:#6B7280">总时长</div>
+        <div style="margin-top:6px;font-size:28px;font-weight:800;font-variant-numeric:tabular-nums">{{ total }}</div>
+        <div style="margin-top:4px;font-size:13px;font-weight:600;color:#6B7280">{{ delta }}</div>
+      </div>
+      <div class="card lift" style="padding:18px 20px">
+        <div style="font-size:13px;font-weight:700;color:#6B7280">日均</div>
+        <div style="margin-top:6px;font-size:28px;font-weight:800;font-variant-numeric:tabular-nums">{{ avg }}</div>
+        <div style="margin-top:4px;font-size:13px;font-weight:600;color:#6B7280">按 {{ dayCount }} 天算</div>
+      </div>
+      <div class="card lift" style="padding:18px 20px">
+        <div style="font-size:13px;font-weight:700;color:#6B7280">花得最多</div>
+        <div style="margin-top:6px;display:flex;align-items:center;gap:8px;font-size:28px;font-weight:800"><span style="width:12px;height:12px;border-radius:4px;background:{{ topColor }}"></span>{{ topName }}</div>
+        <div style="margin-top:4px;font-size:13px;font-weight:600;color:#6B7280">{{ topNote }}</div>
+      </div>
+      <div class="card lift" style="padding:18px 20px">
+        <div style="font-size:13px;font-weight:700;color:#6B7280">专注次数</div>
+        <div style="margin-top:6px;font-size:28px;font-weight:800;font-variant-numeric:tabular-nums">{{ count }} 次</div>
+        <div style="margin-top:4px;font-size:13px;font-weight:600;color:#6B7280">平均每次 {{ per }}</div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start">
+      <div class="card" style="flex:1 1 440px;min-width:0;padding:22px;display:flex;flex-direction:column;gap:18px">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px">
+          <h2 style="margin:0;font-size:18px;font-weight:800">时间花在哪</h2>
+          <div class="seg" style="background:#F2F3F7" role="tablist" aria-label="统计维度">
+            <sc-for list="{{ dims }}" as="p" hint-placeholder-count="2">
+              <button role="tab" aria-selected="{{ p.on }}" onClick="{{ p.pick }}" class="btn" style="height:32px;padding:0 14px;border-radius:9px;font-size:13px;background:{{ p.bg }};color:{{ p.fg }};box-shadow:{{ p.sh }}">{{ p.label }}</button>
+            </sc-for>
+          </div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:24px">
+          <div style="position:relative;width:200px;height:200px;flex:none">
+            <svg width="200" height="200" viewBox="0 0 200 200" aria-hidden="true" style="transform:rotate(-90deg)">
+              <circle cx="100" cy="100" r="80" fill="none" stroke="#F0F1F5" stroke-width="26"/>
+              <sc-for list="{{ arcs }}" as="a" hint-placeholder-count="4">
+                <circle cx="100" cy="100" r="80" fill="none" stroke="{{ a.color }}" stroke-width="26" stroke-dasharray="{{ a.dash }}" stroke-dashoffset="{{ a.off }}"/>
+              </sc-for>
+            </svg>
+            <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">
+              <div style="font-size:12px;font-weight:700;color:#6B7280">合计</div>
+              <div style="font-size:20px;font-weight:800;font-variant-numeric:tabular-nums">{{ totalShort }}</div>
+            </div>
+          </div>
+          <div style="flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:2px">
+            <sc-if value="{{ empty }}" hint-placeholder-val="{{ false }}">
+              <div style="font-size:14px;font-weight:600;color:#6B7280;padding:12px">这个周期还没有记录</div>
+            </sc-if>
+            <sc-for list="{{ legend }}" as="l" hint-placeholder-count="4">
+              <div class="lrow" style="display:grid;grid-template-columns:12px minmax(0,1fr) 92px 40px;align-items:center;gap:10px;padding:8px 10px">
+                <span style="width:10px;height:10px;border-radius:3px;background:{{ l.color }}"></span>
+                <div style="min-width:0">
+                  <div style="display:flex;align-items:center;gap:6px;font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ l.name }}<span style="font-size:11px;font-weight:700;color:{{ l.subInk }}">{{ l.sub }}</span></div>
+                  <div style="margin-top:5px;height:5px;border-radius:999px;background:#F0F1F5;overflow:hidden"><div style="width:{{ l.pct }}%;height:100%;background:{{ l.color }};border-radius:999px"></div></div>
+                </div>
+                <div style="font-size:13px;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right">{{ l.time }}</div>
+                <div style="font-size:13px;font-weight:700;color:#6B7280;text-align:right;font-variant-numeric:tabular-nums">{{ l.pct }}%</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="flex:1.2 1 460px;min-width:0;padding:22px;display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <h2 style="margin:0;font-size:18px;font-weight:800">{{ trendTitle }}</h2>
+          <div style="font-size:12px;font-weight:700;color:#9CA3AF">最高 {{ trendMax }}</div>
+        </div>
+        <div style="display:flex;align-items:flex-end;gap:{{ barGap }}px;height:220px;padding-top:8px;border-bottom:1px solid #EEF0F5">
+          <sc-for list="{{ bars }}" as="b" hint-placeholder-count="7">
+            <div class="bar" title="{{ b.title }}" style="flex:1;min-width:0;height:100%;display:flex;flex-direction:column-reverse;gap:2px">
+              <sc-for list="{{ b.parts }}" as="p" hint-placeholder-count="3">
+                <div style="height:{{ p.h }}%;background:{{ p.color }};border-radius:3px;min-height:{{ p.minH }}px"></div>
+              </sc-for>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex;gap:{{ barGap }}px">
+          <sc-for list="{{ bars }}" as="b" hint-placeholder-count="7">
+            <div style="flex:1;min-width:0;text-align:center;font-size:11px;font-weight:700;color:{{ b.labelInk }};font-variant-numeric:tabular-nums;white-space:nowrap">{{ b.label }}</div>
+          </sc-for>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:12px;padding-top:4px">
+          <sc-for list="{{ mods }}" as="m" hint-placeholder-count="4">
+            <span style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#4B5263"><span style="width:9px;height:9px;border-radius:3px;background:{{ m.color }}"></span>{{ m.name }}</span>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+    <div style="font-size:12px;font-weight:600;color:#9CA3AF">原型里 11.13 之前是按规律生成的示例数据，正式版会用你从 Notion 导入的真实记录。</div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1360,"height":1000}}'>
+class Component extends DCLogic {
+  lib() {
+    if (this._lib) return this._lib;
+    const TODAY = '2026-11-15';
+    // 模块色只用于数据：色 / 浅底 / 深字 / 描边
+    const MODS = {
+      '工作': { c: '#4F7BFF', tint: '#EDF1FF', ink: '#2D4FCC', line: '#C9D5FF' },
+      '学习': { c: '#8B5CF6', tint: '#F2EDFF', ink: '#6236D6', line: '#DCCDFF' },
+      '游戏': { c: '#14B8A6', tint: '#E6F7F4', ink: '#0B7F72', line: '#B5E9E1' },
+      '锻炼': { c: '#F43F5E', tint: '#FFEDF0', ink: '#C8203E', line: '#FFC9D2' }
+    };
+    const TAGS = [
+      { id: 't1', name: '淘教', mod: '工作' }, { id: 't2', name: '个人工作', mod: '工作' },
+      { id: 't3', name: '行者', mod: '工作' }, { id: 't4', name: '各培训机构合作', mod: '工作' },
+      { id: 't5', name: 'Python', mod: '学习' }, { id: 't6', name: '钻研', mod: '学习' },
+      { id: 't7', name: '异环', mod: '游戏' }, { id: 't8', name: '绝区零', mod: '游戏' },
+      { id: 't9', name: '星穹铁道', mod: '游戏' }, { id: 't10', name: '原神', mod: '游戏' },
+      { id: 't11', name: '健身', mod: '锻炼' }
+    ];
+    const byId = {};
+    TAGS.forEach((t) => { byId[t.id] = t; });
+    const pad = (n) => (n < 10 ? '0' + n : '' + n);
+    const hm = (m) => { m = ((Math.round(m) % 1440) + 1440) % 1440; return pad(Math.floor(m / 60)) + ':' + pad(m % 60); };
+    const toMin = (x) => { if (!x) return null; const p = x.split(':'); return parseInt(p[0], 10) * 60 + parseInt(p[1], 10); };
+    const dur = (m) => { m = Math.round(m); return m >= 60 ? Math.floor(m / 60) + ' h ' + (m % 60) + ' min' : m + ' min'; };
+    const durH = (m) => (m >= 6000 ? Math.round(m / 60).toLocaleString('en-US') + ' h' : dur(m));
+    const addDays = (d, n) => { const x = new Date(d + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+    const WK = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+    const wd = (d) => new Date(d + 'T12:00:00Z').getUTCDay();
+    const wk = (d) => WK[wd(d)];
+    const md = (d) => parseInt(d.slice(5, 7), 10) + '.' + parseInt(d.slice(8, 10), 10);
+    const endOf = (r) => (r.e > r.s ? r.e : r.e + 1440);
+    const mondayOf = (d) => addDays(d, -((wd(d) + 6) % 7));
+    // 示例历史数据（按固定种子生成，保证每次一样）；11.13–11.15 用真实样例
+    const gen = () => {
+      const out = [];
+      let seed = 7, n = 0, d = '2026-01-01';
+      const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+      const pick = (a) => a[Math.floor(rnd() * a.length)];
+      const R = (a, b) => a + Math.floor(rnd() * (b - a + 1));
+      while (d < '2026-11-13') {
+        const w = wd(d), we = w === 0 || w === 6;
+        const add = (tag, s, len) => out.push({ id: 'g' + (n++), tag, date: d, s, e: Math.min(s + len, 1439) });
+        if (!we) {
+          add(pick(['t2', 't2', 't1', 't4', 't3']), R(540, 600), R(100, 180));
+          add(pick(['t1', 't4', 't2', 't4']), R(840, 900), R(120, 230));
+          if (rnd() < 0.5) add(rnd() < 0.8 ? 't6' : 't5', R(1170, 1200), R(40, 90));
+          if (rnd() < 0.6) add(pick(['t9', 't8', 't10', 't7', 't9']), R(1300, 1340), R(30, 95));
+          if ((w === 1 || w === 3 || w === 5) && rnd() < 0.6) add('t11', R(1080, 1100), R(40, 60));
+        } else {
+          if (rnd() < 0.4) add('t6', R(600, 640), R(60, 110));
+          add(pick(['t9', 't8', 't10', 't9']), R(780, 840), R(120, 220));
+          if (rnd() < 0.3) add('t11', R(1080, 1100), R(40, 60));
+          if (rnd() < 0.7) add(pick(['t9', 't8', 't10', 't7']), R(1200, 1260), R(60, 150));
+        }
+        d = addDays(d, 1);
+      }
+      return out;
+    };
+    const T = TODAY, Y = '2026-11-14', B = '2026-11-13';
+    const REAL = [
+      { id: 'f1', tag: 't9', date: T, s: 750, e: 966 }, { id: 'f2', tag: 't9', date: T, s: 667, e: 695 },
+      { id: 'f3', tag: 't10', date: T, s: 620, e: 669 }, { id: 'f4', tag: 't8', date: T, s: 607, e: 621 },
+      { id: 'y1', tag: 't9', date: Y, s: 840, e: 1050 }, { id: 'y2', tag: 't11', date: Y, s: 1140, e: 1210 },
+      { id: 'y3', tag: 't6', date: Y, s: 1260, e: 1390 },
+      { id: 'b1', tag: 't2', date: B, s: 570, e: 720 }, { id: 'b2', tag: 't1', date: B, s: 810, e: 1090 },
+      { id: 'b3', tag: 't10', date: B, s: 1260, e: 1350 }
+    ];
+    this._lib = { TODAY, MODS, MK: Object.keys(MODS), TAGS, byId, pad, hm, toMin, dur, durH, addDays, wd, wk, md, endOf, mondayOf, seedRecs: () => gen().concat(REAL) };
+    return this._lib;
+  }
+
+  // 补记录 / 编辑记录弹窗（与今日页同一套）
+  edVals(nowMin) {
+    const s = this.state || {};
+    const ed = s.ed;
+    if (!ed) return { edOpen: false };
+    const { MODS, MK, TAGS, byId, hm, toMin, dur, addDays, md, endOf, TODAY } = this.lib();
+    const recs = s.recs || [];
+    const setEd = (patch) => this.setState({ ed: Object.assign({}, this.state.ed, patch) });
+    const shift = (key, d) => () => { const v = toMin(this.state.ed[key]); setEd({ [key]: hm((v === null ? nowMin : v) + d) }); };
+    const UNSEL = 'inset 0 0 0 1.5px #E1E4EC';
+    const sm = toMin(ed.s), em = toMin(ed.e);
+    const ok = !!ed.tag && sm !== null && em !== null && em !== sm;
+    const length = ok ? (em > sm ? em - sm : em + 1440 - sm) : 0;
+    const eEnd = sm !== null && em !== null ? (em > sm ? em : em + 1440) : null;
+    const ov = (sm === null || eEnd === null) ? [] : recs.filter((r) => r.date === ed.date && r.id !== ed.id && r.s < eEnd && endOf(r) > sm);
+    return {
+      edOpen: true,
+      edTitle: ed.mode === 'edit' ? '编辑记录' : '补一条记录',
+      edHint: ed.mode === 'edit' ? '改标签、日期或起止时间都可以，统计会跟着更新' : '忘了点开始也没关系，把那段时间补上就好',
+      edIsEdit: ed.mode === 'edit',
+      edDate: ed.date, edS: ed.s || '', edE: ed.e || '',
+      edNext: sm !== null && em !== null && em < sm ? '· 次日' : '',
+      edDur: ok ? dur(length) : '—',
+      edSaveOp: ok ? 1 : 0.45,
+      edOverlap: ov.length > 0,
+      edOverlapText: ov.map((r) => byId[r.tag].name + ' ' + hm(r.s) + '–' + hm(r.e)).join('、'),
+      edDays: [[TODAY, '今天'], [addDays(TODAY, -1), '昨天'], [addDays(TODAY, -2), '前天']].map((p) => ({
+        label: p[1] + ' ' + md(p[0]),
+        bg: ed.date === p[0] ? '#111827' : '#FFFFFF', fg: ed.date === p[0] ? '#FFFFFF' : '#111827',
+        ring: ed.date === p[0] ? 'none' : UNSEL,
+        pick: () => setEd({ date: p[0] })
+      })),
+      edGroups: MK.map((k) => ({
+        name: k, color: MODS[k].c,
+        tags: TAGS.filter((t) => t.mod === k).map((t) => ({
+          name: t.name, sel: ed.tag === t.id,
+          bg: ed.tag === t.id ? MODS[k].tint : '#FFFFFF',
+          fg: ed.tag === t.id ? MODS[k].ink : '#374151',
+          ring: ed.tag === t.id ? 'inset 0 0 0 2px ' + MODS[k].c : UNSEL,
+          pick: () => setEd({ tag: t.id })
+        }))
+      })),
+      onEdDate: (e) => setEd({ date: e.target.value || this.state.ed.date }),
+      onEdS: (e) => setEd({ s: e.target.value }),
+      onEdE: (e) => setEd({ e: e.target.value }),
+      sMinus: shift('s', -15), sPlus: shift('s', 15), eMinus: shift('e', -15), ePlus: shift('e', 15),
+      edClose: () => this.setState({ ed: null }),
+      edDelete: () => this.setState({ recs: this.state.recs.filter((r) => r.id !== ed.id), ed: null }),
+      edSave: () => {
+        if (!ok) return;
+        const rec = { id: ed.id || ('n' + (this.state.rseq || 1)), tag: ed.tag, date: ed.date, s: sm, e: em };
+        const list = ed.mode === 'edit' ? this.state.recs.map((r) => (r.id === ed.id ? rec : r)) : this.state.recs.concat([rec]);
+        this.setState(Object.assign({ recs: list, ed: null, rseq: (this.state.rseq || 1) + 1 }, this.onSaved ? this.onSaved(ed.date) : {}));
+      }
+    };
+  }
+
+  // 右上角"数据已同步"：断联监控（原型里点击可切换三种状态演示）
+  syncVals() {
+    const st = (this.state && this.state.sync) || 'ok';
+    const S = {
+      ok: { label: '数据已同步', tip: '服务器连接正常，上次保存 17:20', dot: '#14B8A6', bg: 'transparent', fg: '#4B5263', ring: 'none', cls: 'live' },
+      saving: { label: '正在保存…', tip: '正在把刚才的改动写入数据库', dot: '#E5A800', bg: 'transparent', fg: '#4B5263', ring: 'none', cls: 'live' },
+      off: { label: '连接断开 · 2 条待保存', tip: '暂时连不上服务器，改动先存在本机，恢复后自动补传', dot: '#F2711C', bg: '#FFF7F1', fg: '#9A3A0A', ring: 'inset 0 0 0 1.5px #FFB38A', cls: '' }
+    };
+    const v = S[st], order = ['ok', 'saving', 'off'];
+    return { syncLabel: v.label, syncTip: v.tip + '（原型：点击切换演示状态）', syncDot: v.dot, syncBg: v.bg, syncFg: v.fg, syncRing: v.ring, syncDotCls: v.cls,
+      syncCycle: () => this.setState({ sync: order[(order.indexOf(st) + 1) % 3] }) };
+  }
+
+
+  componentDidMount() {
+    this.setState({ recs: this.lib().seedRecs(), period: 'week', off: 0, dim: 'mod' });
+  }
+
+  renderVals() {
+    const L = this.lib();
+    const { MODS, MK, byId, TAGS, dur, durH, addDays, wk, md, endOf, mondayOf, TODAY } = L;
+    const s = this.state || {};
+    const recs = s.recs || [];
+    const period = s.period || 'week';
+    const off = s.off || 0;
+    const dim = s.dim || 'mod';
+    const Y0 = parseInt(TODAY.slice(0, 4), 10), M0 = parseInt(TODAY.slice(5, 7), 10);
+    const ymd = (y, m, d) => y + '-' + (m < 10 ? '0' : '') + m + '-' + (d < 10 ? '0' : '') + d;
+    const dim0 = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();
+
+    // 周期范围
+    const rangeOf = (p, o) => {
+      if (p === 'day') { const d = addDays(TODAY, o); return { a: d, b: d, label: md(d) + ' ' + wk(d) }; }
+      if (p === 'week') { const a = addDays(mondayOf(TODAY), 7 * o); return { a, b: addDays(a, 6), label: md(a) + ' – ' + md(addDays(a, 6)) }; }
+      if (p === 'month') { let m = M0 + o, y = Y0; while (m < 1) { m += 12; y -= 1; } while (m > 12) { m -= 12; y += 1; } return { a: ymd(y, m, 1), b: ymd(y, m, dim0(y, m)), y, m, label: y + ' 年 ' + m + ' 月' }; }
+      const y = Y0 + o; return { a: ymd(y, 1, 1), b: ymd(y, 12, 31), y, label: y + ' 年' };
+    };
+    const R = rangeOf(period, off);
+    const P = rangeOf(period, off - 1);
+    const inR = (r, x) => r.date >= x.a && r.date <= x.b;
+    const list = recs.filter((r) => inR(r, R));
+    const len = (r) => endOf(r) - r.s;
+    const total = list.reduce((a, r) => a + len(r), 0);
+    const prevTotal = recs.filter((r) => inR(r, P)).reduce((a, r) => a + len(r), 0);
+    const lastDay = R.b < TODAY ? R.b : TODAY;
+    const dayCount = Math.max(1, Math.round((new Date(lastDay + 'T12:00:00Z') - new Date(R.a + 'T12:00:00Z')) / 86400000) + 1);
+    const PN = { day: '前一天', week: '上周', month: '上月', year: '去年' }[period];
+    const diff = total - prevTotal;
+    const delta = prevTotal === 0 ? '比' + PN + '：无记录' : '比' + PN + (diff >= 0 ? ' 多 ' : ' 少 ') + dur(Math.abs(diff));
+
+    // 维度：模块 / 具体事项（事项颜色沿用模块色，按深浅区分）
+    const byMod = {}; MK.forEach((k) => { byMod[k] = 0; });
+    const byTag = {}; TAGS.forEach((t) => { byTag[t.id] = { n: 0, c: 0 }; });
+    list.forEach((r) => { byMod[byId[r.tag].mod] += len(r); byTag[r.tag].n += len(r); byTag[r.tag].c += 1; });
+    const mix = (hex, w) => { const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)); return '#' + c.map((v) => Math.round(v + (255 - v) * w).toString(16).padStart(2, '0')).join(''); };
+    let items;
+    if (dim === 'mod') {
+      items = MK.map((k) => ({ name: k, v: byMod[k], color: MODS[k].c, sub: '', subInk: '#9CA3AF' }));
+    } else {
+      items = [];
+      MK.forEach((k) => {
+        const ts = TAGS.filter((t) => t.mod === k).sort((a, b) => byTag[b.id].n - byTag[a.id].n);
+        ts.forEach((t, i) => items.push({ name: t.name, v: byTag[t.id].n, color: mix(MODS[k].c, Math.min(i * 0.22, 0.66)), sub: k, subInk: MODS[k].ink }));
+      });
+    }
+    items = items.filter((x) => x.v > 0).sort((a, b) => b.v - a.v);
+    const C = 2 * Math.PI * 80;
+    let acc = 0;
+    const arcs = items.map((x) => {
+      const L1 = total ? x.v / total * C : 0;
+      const a = { color: x.color, dash: Math.max(L1 - 2, 0).toFixed(2) + ' ' + C.toFixed(2), off: (-acc).toFixed(2) };
+      acc += L1;
+      return a;
+    });
+    const top = items[0];
+
+    // 趋势
+    let buckets = [], trendTitle = '';
+    if (period === 'day') {
+      trendTitle = '每小时';
+      for (let h = 0; h < 24; h += 1) buckets.push({ label: h % 6 === 0 ? String(h) : '', title: h + ':00', m: {}, test: null, h });
+      list.forEach((r) => {
+        const a = r.s, b = Math.min(endOf(r), 1440);
+        for (let h = Math.floor(a / 60); h < Math.ceil(b / 60) && h < 24; h += 1) {
+          const ov = Math.min(b, (h + 1) * 60) - Math.max(a, h * 60);
+          if (ov > 0) { const k = byId[r.tag].mod; buckets[h].m[k] = (buckets[h].m[k] || 0) + ov; }
+        }
+      });
+    } else if (period === 'year') {
+      trendTitle = '每月';
+      for (let m = 1; m <= 12; m += 1) buckets.push({ label: m + '月', title: R.y + ' 年 ' + m + ' 月', m: {}, key: ymd(R.y, m, 1).slice(0, 7) });
+      list.forEach((r) => { const b = buckets[parseInt(r.date.slice(5, 7), 10) - 1]; const k = byId[r.tag].mod; b.m[k] = (b.m[k] || 0) + len(r); });
+    } else {
+      trendTitle = '每天';
+      const n = period === 'week' ? 7 : dim0(R.y, R.m);
+      for (let i = 0; i < n; i += 1) {
+        const d = addDays(R.a, i);
+        const label = period === 'week' ? wk(d).slice(1) : ((i + 1) % 5 === 0 || i === 0 ? String(i + 1) : '');
+        buckets.push({ label, title: md(d) + ' ' + wk(d), m: {}, date: d });
+      }
+      const idx = {}; buckets.forEach((b, i) => { idx[b.date] = i; });
+      list.forEach((r) => { const b = buckets[idx[r.date]]; if (b) { const k = byId[r.tag].mod; b.m[k] = (b.m[k] || 0) + len(r); } });
+    }
+    const sums = buckets.map((b) => MK.reduce((a, k) => a + (b.m[k] || 0), 0));
+    const mx = Math.max(1, ...sums);
+    const bars = buckets.map((b, i) => ({
+      label: b.label, labelInk: b.date === TODAY ? '#111827' : '#9CA3AF',
+      title: b.title + '：' + (sums[i] ? dur(sums[i]) : '无记录'),
+      parts: MK.filter((k) => b.m[k]).map((k) => ({ h: (b.m[k] / mx * 100).toFixed(2), color: MODS[k].c, minH: 2 }))
+    }));
+
+    const PL = [['day', '日'], ['week', '周'], ['month', '月'], ['year', '年']];
+    return Object.assign(this.syncVals(), {
+      periods: PL.map((p) => ({ label: p[1], on: period === p[0], bg: period === p[0] ? '#111827' : 'transparent', fg: period === p[0] ? '#FFFFFF' : '#4B5263', pick: () => this.setState({ period: p[0], off: 0 }) })),
+      dims: [['mod', '模块'], ['tag', '具体事项']].map((p) => ({ label: p[1], on: dim === p[0], bg: dim === p[0] ? '#FFFFFF' : 'transparent', fg: dim === p[0] ? '#111827' : '#6B7280', sh: dim === p[0] ? '0 1px 3px rgba(17,24,39,.12)' : 'none', pick: () => this.setState({ dim: p[0] }) })),
+      rangeLabel: R.label,
+      nextOp: off >= 0 ? 0.35 : 1,
+      prev: () => this.setState({ off: (this.state.off || 0) - 1 }),
+      next: () => { if ((this.state.off || 0) < 0) this.setState({ off: this.state.off + 1 }); },
+      total: durH(total), totalShort: total >= 600 ? Math.round(total / 60) + ' h' : dur(total),
+      delta,
+      avg: dur(Math.round(total / dayCount)), dayCount,
+      topName: top ? top.name : '—', topColor: top ? top.color : '#E1E4EC',
+      topNote: top ? '占 ' + Math.round(top.v / total * 100) + '%，' + durH(top.v) : '这个周期还没有记录',
+      count: list.length, per: list.length ? dur(Math.round(total / list.length)) : '—',
+      empty: items.length === 0,
+      arcs,
+      legend: items.map((x) => ({ name: x.name, sub: x.sub, subInk: x.subInk, color: x.color, time: durH(x.v), pct: total ? Math.round(x.v / total * 100) : 0 })),
+      trendTitle, trendMax: dur(mx), bars, barGap: buckets.length > 20 ? 3 : 8,
+      mods: MK.map((k) => ({ name: k, color: MODS[k].c }))
+    });
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,562 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>标签 · 时间簿</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button,input{font-family:inherit}
+button{cursor:pointer}
+a{text-decoration:none}
+button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #111827;outline-offset:2px}
+
+/* —— 表面 —— */
+.card{background:#FFFFFF;border:1px solid #E8EAF1;border-radius:20px;
+ box-shadow:0 1px 2px rgba(17,24,39,.04),0 10px 24px -16px rgba(17,24,39,.16);
+ transition:transform .28s cubic-bezier(.2,.8,.2,1),box-shadow .28s,border-color .28s}
+.lift:hover{transform:translateY(-3px);box-shadow:0 2px 4px rgba(17,24,39,.05),0 20px 36px -18px rgba(17,24,39,.26)}
+
+/* —— 按钮：黄色只给"主操作" —— */
+.btn{border:0;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:800;white-space:nowrap;
+ transition:transform .22s cubic-bezier(.2,.8,.2,1),box-shadow .22s,background-color .2s,color .2s}
+.btn:hover{transform:translateY(-2px)}
+.btn:active{transform:translateY(0) scale(.97);transition-duration:.1s}
+.primary{background:#FFD43B;color:#111827;box-shadow:inset 0 1px 0 rgba(255,255,255,.55),0 8px 18px -10px rgba(214,160,0,.9)}
+.primary:hover{background:#FFCC1A;box-shadow:inset 0 1px 0 rgba(255,255,255,.55),0 14px 24px -12px rgba(214,160,0,.95)}
+.dark{background:#111827;color:#FFFFFF}
+.dark:hover{background:#000000}
+.soft{background:#F2F3F7;color:#111827}
+.soft:hover{background:#E9EBF2}
+.go:hover{background:#FFD43B}
+.ghost{background:#FFFFFF;color:#111827;box-shadow:inset 0 0 0 1.5px #E1E4EC}
+.ghost:hover{box-shadow:inset 0 0 0 1.5px #C9CDD8}
+.icon{width:40px;height:40px;border-radius:12px;padding:0}
+
+/* —— 小标签 —— */
+.chip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 11px;border-radius:999px;font-size:13px;font-weight:800;white-space:nowrap}
+.count{display:inline-flex;align-items:center;height:26px;padding:0 10px;border-radius:999px;background:#EEF0F5;color:#4B5263;font-size:13px;font-weight:800}
+
+/* —— 时间线 —— */
+.row{border:0;background:transparent;border-radius:14px;transition:transform .22s cubic-bezier(.2,.8,.2,1),background-color .2s}
+.row:hover{background:#F5F6FA;transform:translateY(-2px)}
+.gap{border:1.5px dashed #FFB38A;background:#FFF7F1;border-radius:14px;transition:transform .22s cubic-bezier(.2,.8,.2,1),background-color .2s}
+.gap:hover{background:#FFEFE3;transform:translateY(-2px)}
+.gapseg{border:0;padding:0;background:repeating-linear-gradient(-45deg,#FFE3D1 0 4px,#FFF6F0 4px 8px);box-shadow:inset 0 0 0 1.5px #FFB38A;transition:filter .2s}
+.gapseg:hover{filter:brightness(.95)}
+.runseg{background-image:repeating-linear-gradient(-45deg,rgba(255,255,255,.4) 0 5px,rgba(255,255,255,0) 5px 10px);background-size:20px 100%;animation:stripes 1s linear infinite}
+
+/* —— 表单 —— */
+.field{height:48px;border:0;border-radius:12px;background:#F5F6FA;box-shadow:inset 0 0 0 1.5px #E1E4EC;padding:0 14px;font-size:20px;font-weight:800;color:#111827;font-variant-numeric:tabular-nums;box-sizing:border-box}
+.field:focus{outline:none;box-shadow:inset 0 0 0 2px #111827;background:#FFFFFF}
+
+@keyframes ping{0%{box-shadow:0 0 0 0 currentColor}80%,100%{box-shadow:0 0 0 8px transparent}}
+@keyframes rise{from{opacity:.001;translate:0 12px}to{opacity:1;translate:0 0}}
+@keyframes pop{from{opacity:0;transform:translateY(16px) scale(.97)}to{opacity:1;transform:none}}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+@keyframes stripes{to{background-position:20px 0}}
+.rise{animation:rise .5s cubic-bezier(.2,.8,.2,1) backwards}
+.live{width:9px;height:9px;border-radius:50%;background:currentColor;animation:ping 1.6s ease-out infinite;flex:none}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+.trow{border-radius:12px;transition:transform .22s cubic-bezier(.2,.8,.2,1),background-color .2s}
+.trow:hover{background:#F5F6FA;transform:translateY(-2px)}
+.act{opacity:.35;transition:opacity .2s}
+.trow:hover .act,.mhead:hover .act,.act:focus-visible{opacity:1}
+.tiny{width:32px;height:32px;border-radius:9px;padding:0;background:transparent;color:#4B5263}
+.tiny:hover{background:#ECEEF3}
+.tiny.del:hover{background:#FFEDF0;color:#C8203E}
+.sw{width:36px;height:36px;border-radius:12px;border:0;padding:0;transition:transform .2s}
+.sw:hover{transform:translateY(-2px)}
+.opt{width:100%;text-align:left;border:0;border-radius:14px;padding:14px 16px;background:#FFFFFF;transition:transform .22s cubic-bezier(.2,.8,.2,1)}
+.opt:hover{transform:translateY(-2px)}
+.tin{height:46px;width:100%;border:0;border-radius:12px;background:#F5F6FA;box-shadow:inset 0 0 0 1.5px #E1E4EC;padding:0 14px;font-size:16px;font-weight:700;color:#111827;box-sizing:border-box}
+.tin:focus{outline:none;box-shadow:inset 0 0 0 2px #111827;background:#FFFFFF}
+</style>
+</helmet>
+<div style="min-height:100vh;background:#F6F7FA;color:#111827;font-family:'Plus Jakarta Sans','Noto Sans SC',sans-serif;display:flex;flex-direction:column">
+  <header style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px;padding:20px 40px;box-sizing:border-box;width:100%;max-width:1360px;margin:0 auto">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="width:40px;height:40px;border-radius:12px;background:#FFD43B;display:flex;align-items:center;justify-content:center">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111827" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      </div>
+      <div style="font-size:20px;font-weight:800;letter-spacing:-0.01em">时间簿</div>
+    </div>
+    <nav class="card" aria-label="主导航" style="display:flex;gap:2px;border-radius:14px;padding:4px">
+      <a href="Today.dc.html" class="btn" style="height:40px;padding:0 20px;border-radius:10px;font-size:14px;color:#4B5263;background:transparent">今日</a>
+      <a href="Calendar.dc.html" class="btn" style="height:40px;padding:0 20px;border-radius:10px;font-size:14px;color:#4B5263;background:transparent">日历</a>
+      <a href="Stats.dc.html" class="btn" style="height:40px;padding:0 20px;border-radius:10px;font-size:14px;color:#4B5263;background:transparent">统计</a>
+      <a href="Tags.dc.html" aria-current="page" class="btn dark" style="height:40px;padding:0 20px;border-radius:10px;font-size:14px">标签</a>
+    </nav>
+    <button onClick="{{ syncCycle }}" class="btn" title="{{ syncTip }}" aria-label="{{ syncLabel }}：{{ syncTip }}" style="height:34px;padding:0 12px;border-radius:999px;font-size:13px;font-weight:700;background:{{ syncBg }};color:{{ syncFg }};box-shadow:{{ syncRing }}">
+      <span class="{{ syncDotCls }}" style="width:8px;height:8px;border-radius:50%;background:{{ syncDot }};color:{{ syncDot }};flex:none"></span>{{ syncLabel }}
+    </button>
+  </header>
+  <main style="flex:1;box-sizing:border-box;width:100%;max-width:1360px;margin:0 auto;padding:4px 40px 64px;display:flex;flex-direction:column;gap:20px">
+    <section style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px">
+      <div>
+        <h1 style="margin:0;font-size:34px;line-height:1.15;font-weight:800;letter-spacing:-0.02em">标签</h1>
+        <div style="margin-top:6px;font-size:14px;font-weight:600;color:#6B7280">模块（一级）下面挂具体事项（二级）。事项的颜色跟随所属模块。</div>
+      </div>
+      <button onClick="{{ newMod }}" class="btn primary" style="height:44px;padding:0 18px;border-radius:12px;font-size:14px">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>新建模块</button>
+    </section>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:16px;align-items:start">
+      <sc-for list="{{ cols }}" as="c" hint-placeholder-count="4">
+        <section class="card lift rise" aria-label="{{ c.name }}" style="padding:18px;display:flex;flex-direction:column;gap:12px">
+          <div class="mhead" style="display:flex;align-items:center;gap:10px">
+            <span style="width:14px;height:14px;border-radius:4px;background:{{ c.color }};flex:none"></span>
+            <h2 style="margin:0;font-size:18px;font-weight:800;flex:1;min-width:0">{{ c.name }}</h2>
+            <button onClick="{{ c.edit }}" class="btn tiny act" aria-label="修改模块 {{ c.name }}">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button>
+            <button onClick="{{ c.del }}" class="btn tiny del act" aria-label="删除模块 {{ c.name }}">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>
+          </div>
+          <div style="display:flex;gap:16px;padding:12px 14px;border-radius:14px;background:{{ c.tint }}">
+            <div><div style="font-size:12px;font-weight:700;color:{{ c.ink }}">累计</div><div style="font-size:20px;font-weight:800;color:{{ c.ink }};font-variant-numeric:tabular-nums">{{ c.total }}</div></div>
+            <div><div style="font-size:12px;font-weight:700;color:{{ c.ink }}">事项</div><div style="font-size:20px;font-weight:800;color:{{ c.ink }}">{{ c.count }}</div></div>
+            <div><div style="font-size:12px;font-weight:700;color:{{ c.ink }}">记录</div><div style="font-size:20px;font-weight:800;color:{{ c.ink }};font-variant-numeric:tabular-nums">{{ c.recs }}</div></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:2px">
+            <sc-if value="{{ c.noTags }}" hint-placeholder-val="{{ false }}">
+              <div style="padding:10px;font-size:13px;font-weight:600;color:#9CA3AF">还没有事项</div>
+            </sc-if>
+            <sc-for list="{{ c.tags }}" as="t" hint-placeholder-count="3">
+              <div class="trow" style="display:flex;align-items:center;gap:10px;padding:8px 8px 8px 10px">
+                <div style="flex:1;min-width:0">
+                  <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+                    <span style="font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.name }}</span>
+                    <span style="font-size:13px;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap">{{ t.time }}</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+                    <div style="flex:1;height:5px;border-radius:999px;background:#F0F1F5;overflow:hidden"><div style="width:{{ t.pct }}%;height:100%;border-radius:999px;background:{{ c.color }}"></div></div>
+                    <span style="width:96px;white-space:nowrap;text-align:right;font-size:12px;font-weight:700;color:#6B7280;font-variant-numeric:tabular-nums">{{ t.pct }}% · {{ t.n }} 次</span>
+                  </div>
+                </div>
+                <button onClick="{{ t.edit }}" class="btn tiny act" aria-label="修改 {{ t.name }}">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button>
+                <button onClick="{{ t.del }}" class="btn tiny del act" aria-label="删除 {{ t.name }}">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>
+              </div>
+            </sc-for>
+          </div>
+          <button onClick="{{ c.add }}" class="btn soft" style="height:40px;border-radius:12px;font-size:14px">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>新建事项</button>
+        </section>
+      </sc-for>
+    </div>
+    <div style="font-size:12px;font-weight:600;color:#9CA3AF">鼠标移到事项或模块标题上，会出现修改和删除按钮。百分比是该事项在模块里的占比。</div>
+  </main>
+
+  <sc-if value="{{ tOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;background:rgba(17,24,39,.35);animation:fade .2s both;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;z-index:10">
+      <div role="dialog" aria-label="{{ tTitle }}" class="card" style="animation:pop .3s cubic-bezier(.2,.8,.2,1) both;border-radius:24px;padding:28px;width:100%;max-width:480px;box-sizing:border-box;display:flex;flex-direction:column;gap:20px">
+        <h2 style="margin:0;font-size:24px;font-weight:800">{{ tTitle }}</h2>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <label for="tName" style="font-size:13px;font-weight:800;color:#4B5263">名称</label>
+          <input id="tName" class="tin" value="{{ tName }}" onInput="{{ onTName }}" placeholder="比如：英语、羽毛球、Zelda…">
+          <sc-if value="{{ tDup }}" hint-placeholder-val="{{ false }}">
+            <div style="font-size:12px;font-weight:700;color:#C8203E">这个模块里已经有同名事项了</div>
+          </sc-if>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="font-size:13px;font-weight:800;color:#4B5263">属于哪个模块</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <sc-for list="{{ tMods }}" as="m" hint-placeholder-count="4">
+              <button onClick="{{ m.pick }}" class="btn" aria-pressed="{{ m.sel }}" style="height:38px;padding:0 14px;border-radius:10px;font-size:14px;background:{{ m.bg }};color:{{ m.fg }};box-shadow:{{ m.ring }}"><span style="width:8px;height:8px;border-radius:50%;background:{{ m.color }}"></span>{{ m.name }}</button>
+            </sc-for>
+          </div>
+          <sc-if value="{{ tMoving }}" hint-placeholder-val="{{ false }}">
+            <div style="font-size:12px;font-weight:600;color:#6B7280">换模块后，这个事项过去的 {{ tRecN }} 条记录会一起算到新模块里。</div>
+          </sc-if>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:10px">
+          <button onClick="{{ tClose }}" class="btn ghost" style="height:46px;padding:0 20px;border-radius:12px;font-size:15px">取消</button>
+          <button onClick="{{ tSave }}" class="btn primary" style="height:46px;padding:0 26px;border-radius:12px;font-size:15px;opacity:{{ tSaveOp }}">保存</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ mOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;background:rgba(17,24,39,.35);animation:fade .2s both;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;z-index:10">
+      <div role="dialog" aria-label="{{ mTitle }}" class="card" style="animation:pop .3s cubic-bezier(.2,.8,.2,1) both;border-radius:24px;padding:28px;width:100%;max-width:480px;box-sizing:border-box;display:flex;flex-direction:column;gap:20px">
+        <h2 style="margin:0;font-size:24px;font-weight:800">{{ mTitle }}</h2>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <label for="mName" style="font-size:13px;font-weight:800;color:#4B5263">名称</label>
+          <input id="mName" class="tin" value="{{ mName }}" onInput="{{ onMName }}" placeholder="比如：阅读、副业…">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="font-size:13px;font-weight:800;color:#4B5263">颜色</div>
+          <div style="display:flex;flex-wrap:wrap;gap:10px">
+            <sc-for list="{{ swatches }}" as="w" hint-placeholder-count="8">
+              <button onClick="{{ w.pick }}" class="sw" aria-label="{{ w.label }}" aria-pressed="{{ w.sel }}" title="{{ w.label }}" style="background:{{ w.c }};box-shadow:{{ w.ring }};opacity:{{ w.op }}"></button>
+            </sc-for>
+          </div>
+          <div style="font-size:12px;font-weight:600;color:#6B7280">{{ mColorNote }}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;background:{{ mPrevTint }}">
+          <span style="font-size:12px;font-weight:700;color:#6B7280">预览</span>
+          <span class="chip" style="background:#FFFFFF;color:{{ mPrevInk }}"><span style="width:7px;height:7px;border-radius:50%;background:{{ mPrevC }}"></span>{{ mPrevName }}</span>
+          <span style="flex:1;height:10px;border-radius:4px;background:{{ mPrevC }}"></span>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:10px">
+          <button onClick="{{ mClose }}" class="btn ghost" style="height:46px;padding:0 20px;border-radius:12px;font-size:15px">取消</button>
+          <button onClick="{{ mSave }}" class="btn primary" style="height:46px;padding:0 26px;border-radius:12px;font-size:15px;opacity:{{ mSaveOp }}">保存</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ dOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;background:rgba(17,24,39,.35);animation:fade .2s both;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;z-index:10">
+      <div role="dialog" aria-label="{{ dTitle }}" class="card" style="animation:pop .3s cubic-bezier(.2,.8,.2,1) both;border-radius:24px;padding:28px;width:100%;max-width:520px;max-height:92vh;overflow:auto;box-sizing:border-box;display:flex;flex-direction:column;gap:16px">
+        <div>
+          <h2 style="margin:0;font-size:24px;font-weight:800">{{ dTitle }}</h2>
+          <div style="margin-top:6px;font-size:14px;font-weight:600;color:#6B7280">{{ dDesc }}</div>
+        </div>
+        <sc-if value="{{ dHasData }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;flex-direction:column;gap:10px;background:#F5F6FA;border-radius:18px;padding:10px">
+            <button onClick="{{ dPickMove }}" class="opt" aria-pressed="{{ dIsMove }}" style="box-shadow:{{ dMoveRing }}">
+              <div style="font-size:15px;font-weight:800;color:#111827">{{ dMoveTitle }}</div>
+              <div style="margin-top:2px;font-size:13px;font-weight:600;color:#6B7280">统计时长保持不变，推荐</div>
+            </button>
+            <sc-if value="{{ dIsMove }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;flex-wrap:wrap;gap:8px;padding:2px 6px 6px">
+                <sc-for list="{{ dTargets }}" as="x" hint-placeholder-count="4">
+                  <button onClick="{{ x.pick }}" class="btn" aria-pressed="{{ x.sel }}" style="height:36px;padding:0 12px;border-radius:10px;font-size:13px;background:{{ x.bg }};color:{{ x.fg }};box-shadow:{{ x.ring }}"><span style="width:7px;height:7px;border-radius:50%;background:{{ x.color }}"></span>{{ x.name }}</button>
+                </sc-for>
+              </div>
+            </sc-if>
+            <button onClick="{{ dPickDrop }}" class="opt" aria-pressed="{{ dIsDrop }}" style="box-shadow:{{ dDropRing }}">
+              <div style="font-size:15px;font-weight:800;color:#C8203E">{{ dDropTitle }}</div>
+              <div style="margin-top:2px;font-size:13px;font-weight:600;color:#6B7280">{{ dDropNote }}</div>
+            </button>
+          </div>
+        </sc-if>
+        <div style="display:flex;justify-content:flex-end;gap:10px">
+          <button onClick="{{ dClose }}" class="btn ghost" style="height:46px;padding:0 20px;border-radius:12px;font-size:15px">取消</button>
+          <button onClick="{{ dDo }}" class="btn" style="height:46px;padding:0 22px;border-radius:12px;font-size:15px;background:#E11D48;color:#FFFFFF;opacity:{{ dOkOp }}">删除</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1360,"height":980}}'>
+class Component extends DCLogic {
+  lib() {
+    if (this._lib) return this._lib;
+    const TODAY = '2026-11-15';
+    // 模块色只用于数据：色 / 浅底 / 深字 / 描边
+    const MODS = {
+      '工作': { c: '#4F7BFF', tint: '#EDF1FF', ink: '#2D4FCC', line: '#C9D5FF' },
+      '学习': { c: '#8B5CF6', tint: '#F2EDFF', ink: '#6236D6', line: '#DCCDFF' },
+      '游戏': { c: '#14B8A6', tint: '#E6F7F4', ink: '#0B7F72', line: '#B5E9E1' },
+      '锻炼': { c: '#F43F5E', tint: '#FFEDF0', ink: '#C8203E', line: '#FFC9D2' }
+    };
+    const TAGS = [
+      { id: 't1', name: '淘教', mod: '工作' }, { id: 't2', name: '个人工作', mod: '工作' },
+      { id: 't3', name: '行者', mod: '工作' }, { id: 't4', name: '各培训机构合作', mod: '工作' },
+      { id: 't5', name: 'Python', mod: '学习' }, { id: 't6', name: '钻研', mod: '学习' },
+      { id: 't7', name: '异环', mod: '游戏' }, { id: 't8', name: '绝区零', mod: '游戏' },
+      { id: 't9', name: '星穹铁道', mod: '游戏' }, { id: 't10', name: '原神', mod: '游戏' },
+      { id: 't11', name: '健身', mod: '锻炼' }
+    ];
+    const byId = {};
+    TAGS.forEach((t) => { byId[t.id] = t; });
+    const pad = (n) => (n < 10 ? '0' + n : '' + n);
+    const hm = (m) => { m = ((Math.round(m) % 1440) + 1440) % 1440; return pad(Math.floor(m / 60)) + ':' + pad(m % 60); };
+    const toMin = (x) => { if (!x) return null; const p = x.split(':'); return parseInt(p[0], 10) * 60 + parseInt(p[1], 10); };
+    const dur = (m) => { m = Math.round(m); return m >= 60 ? Math.floor(m / 60) + ' h ' + (m % 60) + ' min' : m + ' min'; };
+    const durH = (m) => (m >= 6000 ? Math.round(m / 60).toLocaleString('en-US') + ' h' : dur(m));
+    const addDays = (d, n) => { const x = new Date(d + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+    const WK = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+    const wd = (d) => new Date(d + 'T12:00:00Z').getUTCDay();
+    const wk = (d) => WK[wd(d)];
+    const md = (d) => parseInt(d.slice(5, 7), 10) + '.' + parseInt(d.slice(8, 10), 10);
+    const endOf = (r) => (r.e > r.s ? r.e : r.e + 1440);
+    const mondayOf = (d) => addDays(d, -((wd(d) + 6) % 7));
+    // 示例历史数据（按固定种子生成，保证每次一样）；11.13–11.15 用真实样例
+    const gen = () => {
+      const out = [];
+      let seed = 7, n = 0, d = '2026-01-01';
+      const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+      const pick = (a) => a[Math.floor(rnd() * a.length)];
+      const R = (a, b) => a + Math.floor(rnd() * (b - a + 1));
+      while (d < '2026-11-13') {
+        const w = wd(d), we = w === 0 || w === 6;
+        const add = (tag, s, len) => out.push({ id: 'g' + (n++), tag, date: d, s, e: Math.min(s + len, 1439) });
+        if (!we) {
+          add(pick(['t2', 't2', 't1', 't4', 't3']), R(540, 600), R(100, 180));
+          add(pick(['t1', 't4', 't2', 't4']), R(840, 900), R(120, 230));
+          if (rnd() < 0.5) add(rnd() < 0.8 ? 't6' : 't5', R(1170, 1200), R(40, 90));
+          if (rnd() < 0.6) add(pick(['t9', 't8', 't10', 't7', 't9']), R(1300, 1340), R(30, 95));
+          if ((w === 1 || w === 3 || w === 5) && rnd() < 0.6) add('t11', R(1080, 1100), R(40, 60));
+        } else {
+          if (rnd() < 0.4) add('t6', R(600, 640), R(60, 110));
+          add(pick(['t9', 't8', 't10', 't9']), R(780, 840), R(120, 220));
+          if (rnd() < 0.3) add('t11', R(1080, 1100), R(40, 60));
+          if (rnd() < 0.7) add(pick(['t9', 't8', 't10', 't7']), R(1200, 1260), R(60, 150));
+        }
+        d = addDays(d, 1);
+      }
+      return out;
+    };
+    const T = TODAY, Y = '2026-11-14', B = '2026-11-13';
+    const REAL = [
+      { id: 'f1', tag: 't9', date: T, s: 750, e: 966 }, { id: 'f2', tag: 't9', date: T, s: 667, e: 695 },
+      { id: 'f3', tag: 't10', date: T, s: 620, e: 669 }, { id: 'f4', tag: 't8', date: T, s: 607, e: 621 },
+      { id: 'y1', tag: 't9', date: Y, s: 840, e: 1050 }, { id: 'y2', tag: 't11', date: Y, s: 1140, e: 1210 },
+      { id: 'y3', tag: 't6', date: Y, s: 1260, e: 1390 },
+      { id: 'b1', tag: 't2', date: B, s: 570, e: 720 }, { id: 'b2', tag: 't1', date: B, s: 810, e: 1090 },
+      { id: 'b3', tag: 't10', date: B, s: 1260, e: 1350 }
+    ];
+    this._lib = { TODAY, MODS, MK: Object.keys(MODS), TAGS, byId, pad, hm, toMin, dur, durH, addDays, wd, wk, md, endOf, mondayOf, seedRecs: () => gen().concat(REAL) };
+    return this._lib;
+  }
+
+  // 补记录 / 编辑记录弹窗（与今日页同一套）
+  edVals(nowMin) {
+    const s = this.state || {};
+    const ed = s.ed;
+    if (!ed) return { edOpen: false };
+    const { MODS, MK, TAGS, byId, hm, toMin, dur, addDays, md, endOf, TODAY } = this.lib();
+    const recs = s.recs || [];
+    const setEd = (patch) => this.setState({ ed: Object.assign({}, this.state.ed, patch) });
+    const shift = (key, d) => () => { const v = toMin(this.state.ed[key]); setEd({ [key]: hm((v === null ? nowMin : v) + d) }); };
+    const UNSEL = 'inset 0 0 0 1.5px #E1E4EC';
+    const sm = toMin(ed.s), em = toMin(ed.e);
+    const ok = !!ed.tag && sm !== null && em !== null && em !== sm;
+    const length = ok ? (em > sm ? em - sm : em + 1440 - sm) : 0;
+    const eEnd = sm !== null && em !== null ? (em > sm ? em : em + 1440) : null;
+    const ov = (sm === null || eEnd === null) ? [] : recs.filter((r) => r.date === ed.date && r.id !== ed.id && r.s < eEnd && endOf(r) > sm);
+    return {
+      edOpen: true,
+      edTitle: ed.mode === 'edit' ? '编辑记录' : '补一条记录',
+      edHint: ed.mode === 'edit' ? '改标签、日期或起止时间都可以，统计会跟着更新' : '忘了点开始也没关系，把那段时间补上就好',
+      edIsEdit: ed.mode === 'edit',
+      edDate: ed.date, edS: ed.s || '', edE: ed.e || '',
+      edNext: sm !== null && em !== null && em < sm ? '· 次日' : '',
+      edDur: ok ? dur(length) : '—',
+      edSaveOp: ok ? 1 : 0.45,
+      edOverlap: ov.length > 0,
+      edOverlapText: ov.map((r) => byId[r.tag].name + ' ' + hm(r.s) + '–' + hm(r.e)).join('、'),
+      edDays: [[TODAY, '今天'], [addDays(TODAY, -1), '昨天'], [addDays(TODAY, -2), '前天']].map((p) => ({
+        label: p[1] + ' ' + md(p[0]),
+        bg: ed.date === p[0] ? '#111827' : '#FFFFFF', fg: ed.date === p[0] ? '#FFFFFF' : '#111827',
+        ring: ed.date === p[0] ? 'none' : UNSEL,
+        pick: () => setEd({ date: p[0] })
+      })),
+      edGroups: MK.map((k) => ({
+        name: k, color: MODS[k].c,
+        tags: TAGS.filter((t) => t.mod === k).map((t) => ({
+          name: t.name, sel: ed.tag === t.id,
+          bg: ed.tag === t.id ? MODS[k].tint : '#FFFFFF',
+          fg: ed.tag === t.id ? MODS[k].ink : '#374151',
+          ring: ed.tag === t.id ? 'inset 0 0 0 2px ' + MODS[k].c : UNSEL,
+          pick: () => setEd({ tag: t.id })
+        }))
+      })),
+      onEdDate: (e) => setEd({ date: e.target.value || this.state.ed.date }),
+      onEdS: (e) => setEd({ s: e.target.value }),
+      onEdE: (e) => setEd({ e: e.target.value }),
+      sMinus: shift('s', -15), sPlus: shift('s', 15), eMinus: shift('e', -15), ePlus: shift('e', 15),
+      edClose: () => this.setState({ ed: null }),
+      edDelete: () => this.setState({ recs: this.state.recs.filter((r) => r.id !== ed.id), ed: null }),
+      edSave: () => {
+        if (!ok) return;
+        const rec = { id: ed.id || ('n' + (this.state.rseq || 1)), tag: ed.tag, date: ed.date, s: sm, e: em };
+        const list = ed.mode === 'edit' ? this.state.recs.map((r) => (r.id === ed.id ? rec : r)) : this.state.recs.concat([rec]);
+        this.setState(Object.assign({ recs: list, ed: null, rseq: (this.state.rseq || 1) + 1 }, this.onSaved ? this.onSaved(ed.date) : {}));
+      }
+    };
+  }
+
+  // 右上角"数据已同步"：断联监控（原型里点击可切换三种状态演示）
+  syncVals() {
+    const st = (this.state && this.state.sync) || 'ok';
+    const S = {
+      ok: { label: '数据已同步', tip: '服务器连接正常，上次保存 17:20', dot: '#14B8A6', bg: 'transparent', fg: '#4B5263', ring: 'none', cls: 'live' },
+      saving: { label: '正在保存…', tip: '正在把刚才的改动写入数据库', dot: '#E5A800', bg: 'transparent', fg: '#4B5263', ring: 'none', cls: 'live' },
+      off: { label: '连接断开 · 2 条待保存', tip: '暂时连不上服务器，改动先存在本机，恢复后自动补传', dot: '#F2711C', bg: '#FFF7F1', fg: '#9A3A0A', ring: 'inset 0 0 0 1.5px #FFB38A', cls: '' }
+    };
+    const v = S[st], order = ['ok', 'saving', 'off'];
+    return { syncLabel: v.label, syncTip: v.tip + '（原型：点击切换演示状态）', syncDot: v.dot, syncBg: v.bg, syncFg: v.fg, syncRing: v.ring, syncDotCls: v.cls,
+      syncCycle: () => this.setState({ sync: order[(order.indexOf(st) + 1) % 3] }) };
+  }
+
+
+  componentDidMount() {
+    const L = this.lib();
+    const PALK = { '工作': 'blue', '学习': 'violet', '游戏': 'teal', '锻炼': 'rose' };
+    const mods = L.MK.map((k, i) => ({ id: 'm' + (i + 1), name: k, pal: PALK[k] }));
+    const mid = {}; mods.forEach((m) => { mid[m.name] = m.id; });
+    this.setState({
+      mods,
+      tags: L.TAGS.map((t) => ({ id: t.id, name: t.name, mod: mid[t.mod] })),
+      recs: L.seedRecs(),
+      te: null, me: null, de: null, seq: 100
+    });
+  }
+
+  renderVals() {
+    const { dur } = this.lib();
+    const durH = (m) => (m >= 600 ? Math.round(m / 60).toLocaleString('en-US') + ' h' : dur(m));
+    const s = this.state || {};
+    const PAL = {
+      blue: { label: '蓝', c: '#4F7BFF', tint: '#EDF1FF', ink: '#2D4FCC' },
+      violet: { label: '紫', c: '#8B5CF6', tint: '#F2EDFF', ink: '#6236D6' },
+      teal: { label: '青绿', c: '#14B8A6', tint: '#E6F7F4', ink: '#0B7F72' },
+      rose: { label: '玫红', c: '#F43F5E', tint: '#FFEDF0', ink: '#C8203E' },
+      amber: { label: '琥珀', c: '#F59E0B', tint: '#FEF5E2', ink: '#9A5800' },
+      sky: { label: '天蓝', c: '#0EA5E9', tint: '#E5F5FD', ink: '#086A99' },
+      green: { label: '绿', c: '#22C55E', tint: '#E8F8EE', ink: '#15803D' },
+      pink: { label: '粉', c: '#EC4899', tint: '#FDEDF6', ink: '#B5186E' }
+    };
+    const mods = s.mods || [], tags = s.tags || [], recs = s.recs || [];
+    const SEL = 'inset 0 0 0 2px #111827', UNSEL = 'inset 0 0 0 1.5px #E1E4EC';
+    const mins = {}, cnt = {};
+    recs.forEach((r) => { const l = (r.e > r.s ? r.e : r.e + 1440) - r.s; mins[r.tag] = (mins[r.tag] || 0) + l; cnt[r.tag] = (cnt[r.tag] || 0) + 1; });
+    const modOf = (id) => mods.find((m) => m.id === id);
+    const tagOf = (id) => tags.find((t) => t.id === id);
+    const nid = () => { const n = (this.state.seq || 100) + 1; return n; };
+
+    const cols = mods.map((m) => {
+      const p = PAL[m.pal];
+      const ts = tags.filter((t) => t.mod === m.id).sort((a, b) => (mins[b.id] || 0) - (mins[a.id] || 0));
+      const total = ts.reduce((a, t) => a + (mins[t.id] || 0), 0);
+      return {
+        name: m.name, color: p.c, tint: p.tint, ink: p.ink,
+        total: durH(total), count: ts.length, recs: ts.reduce((a, t) => a + (cnt[t.id] || 0), 0).toLocaleString('en-US'),
+        noTags: ts.length === 0,
+        edit: () => this.setState({ me: { mode: 'edit', id: m.id, name: m.name, pal: m.pal } }),
+        del: () => this.setState({ de: { kind: 'mod', id: m.id, act: 'move', target: null } }),
+        add: () => this.setState({ te: { mode: 'new', name: '', mod: m.id } }),
+        tags: ts.map((t) => ({
+          name: t.name, time: durH(mins[t.id] || 0), n: (cnt[t.id] || 0).toLocaleString('en-US'),
+          pct: total ? Math.round((mins[t.id] || 0) / total * 100) : 0,
+          edit: () => this.setState({ te: { mode: 'edit', id: t.id, name: t.name, mod: t.mod, mod0: t.mod } }),
+          del: () => this.setState({ de: { kind: 'tag', id: t.id, act: 'move', target: null } })
+        }))
+      };
+    });
+
+    // 事项弹窗
+    const te = s.te;
+    let tv = { tOpen: false };
+    if (te) {
+      const nm = (te.name || '').trim();
+      const dup = !!nm && tags.some((t) => t.mod === te.mod && t.name === nm && t.id !== te.id);
+      const ok = !!nm && !dup;
+      tv = {
+        tOpen: true, tTitle: te.mode === 'edit' ? '修改事项' : '新建事项', tName: te.name, tDup: dup,
+        tSaveOp: ok ? 1 : 0.45,
+        tMoving: te.mode === 'edit' && te.mod !== te.mod0, tRecN: te.id ? (cnt[te.id] || 0) : 0,
+        onTName: (e) => this.setState({ te: Object.assign({}, this.state.te, { name: e.target.value }) }),
+        tMods: mods.map((m) => ({ name: m.name, color: PAL[m.pal].c, sel: te.mod === m.id,
+          bg: te.mod === m.id ? PAL[m.pal].tint : '#FFFFFF', fg: te.mod === m.id ? PAL[m.pal].ink : '#374151',
+          ring: te.mod === m.id ? 'inset 0 0 0 2px ' + PAL[m.pal].c : UNSEL,
+          pick: () => this.setState({ te: Object.assign({}, this.state.te, { mod: m.id }) }) })),
+        tClose: () => this.setState({ te: null }),
+        tSave: () => {
+          if (!ok) return;
+          if (te.mode === 'edit') this.setState({ te: null, tags: this.state.tags.map((t) => (t.id === te.id ? { id: t.id, name: nm, mod: te.mod } : t)) });
+          else { const n = nid(); this.setState({ te: null, seq: n, tags: this.state.tags.concat([{ id: 'x' + n, name: nm, mod: te.mod }]) }); }
+        }
+      };
+    }
+
+    // 模块弹窗
+    const me = s.me;
+    let mv = { mOpen: false };
+    if (me) {
+      const nm = (me.name || '').trim();
+      const used = mods.filter((m) => m.id !== me.id).map((m) => m.pal);
+      const p = PAL[me.pal] || PAL.blue;
+      const owner = mods.find((m) => m.id !== me.id && m.pal === me.pal);
+      mv = {
+        mOpen: true, mTitle: me.mode === 'edit' ? '修改模块' : '新建模块', mName: me.name,
+        mSaveOp: nm ? 1 : 0.45,
+        mColorNote: owner ? '这个颜色「' + owner.name + '」也在用，两个模块在图表里会分不清，建议换一个' : '日历、统计、时间条里都会用这个颜色',
+        mPrevTint: p.tint, mPrevInk: p.ink, mPrevC: p.c, mPrevName: nm || '模块名',
+        onMName: (e) => this.setState({ me: Object.assign({}, this.state.me, { name: e.target.value }) }),
+        swatches: Object.keys(PAL).map((k) => ({ label: PAL[k].label + (used.indexOf(k) >= 0 ? '（已被使用）' : ''), c: PAL[k].c, sel: me.pal === k,
+          ring: me.pal === k ? '0 0 0 3px #FFFFFF, 0 0 0 5px #111827' : 'none', op: used.indexOf(k) >= 0 && me.pal !== k ? 0.35 : 1,
+          pick: () => this.setState({ me: Object.assign({}, this.state.me, { pal: k }) }) })),
+        mClose: () => this.setState({ me: null }),
+        mSave: () => {
+          if (!nm) return;
+          if (me.mode === 'edit') this.setState({ me: null, mods: this.state.mods.map((m) => (m.id === me.id ? { id: m.id, name: nm, pal: me.pal } : m)) });
+          else { const n = nid(); this.setState({ me: null, seq: n, mods: this.state.mods.concat([{ id: 'm' + n, name: nm, pal: me.pal }]) }); }
+        }
+      };
+    }
+
+    // 删除确认（有记录时让你选：迁移 or 一起删）
+    const de = s.de;
+    let dv = { dOpen: false };
+    if (de) {
+      const setDe = (patch) => this.setState({ de: Object.assign({}, this.state.de, patch) });
+      const isTag = de.kind === 'tag';
+      const obj = isTag ? tagOf(de.id) : modOf(de.id);
+      const mTags = isTag ? [] : tags.filter((t) => t.mod === de.id);
+      const n = isTag ? (cnt[de.id] || 0) : mTags.reduce((a, t) => a + (cnt[t.id] || 0), 0);
+      const m = isTag ? mTags : null;
+      const hours = durH(isTag ? (mins[de.id] || 0) : mTags.reduce((a, t) => a + (mins[t.id] || 0), 0));
+      const hasData = isTag ? n > 0 : mTags.length > 0;
+      const targets = isTag
+        ? tags.filter((t) => t.id !== de.id).map((t) => { const mm = modOf(t.mod); return { id: t.id, name: t.name, color: PAL[mm.pal].c, tint: PAL[mm.pal].tint, ink: PAL[mm.pal].ink }; })
+        : mods.filter((x) => x.id !== de.id).map((x) => ({ id: x.id, name: x.name, color: PAL[x.pal].c, tint: PAL[x.pal].tint, ink: PAL[x.pal].ink }));
+      const canDo = !hasData || de.act === 'drop' || !!de.target;
+      dv = {
+        dOpen: true,
+        dTitle: '删除' + (isTag ? '事项' : '模块') + '「' + obj.name + '」',
+        dDesc: hasData
+          ? (isTag ? '它下面有 ' + n + ' 条专注记录，共 ' + hours + '。这些记录怎么处理？' : '它下面有 ' + mTags.length + ' 个事项、' + n + ' 条记录，共 ' + hours + '。怎么处理？')
+          : (isTag ? '这个事项还没有任何记录，可以直接删除。' : '这个模块是空的，可以直接删除。'),
+        dHasData: hasData,
+        dIsMove: de.act === 'move', dIsDrop: de.act === 'drop',
+        dMoveRing: de.act === 'move' ? SEL : UNSEL, dDropRing: de.act === 'drop' ? 'inset 0 0 0 2px #E11D48' : UNSEL,
+        dMoveTitle: isTag ? '把这些记录改到另一个事项下' : '把这些事项移到另一个模块',
+        dDropTitle: isTag ? '连同 ' + n + ' 条记录一起删除' : '连同事项和 ' + n + ' 条记录一起删除',
+        dDropNote: '统计里会少掉 ' + hours + '，不能撤销',
+        dPickMove: () => setDe({ act: 'move' }), dPickDrop: () => setDe({ act: 'drop' }),
+        dTargets: targets.map((x) => ({ name: x.name, color: x.color, sel: de.target === x.id,
+          bg: de.target === x.id ? x.tint : '#FFFFFF', fg: de.target === x.id ? x.ink : '#374151',
+          ring: de.target === x.id ? 'inset 0 0 0 2px ' + x.color : UNSEL, pick: () => setDe({ target: x.id }) })),
+        dOkOp: canDo ? 1 : 0.45,
+        dClose: () => this.setState({ de: null }),
+        dDo: () => {
+          if (!canDo) return;
+          const st = this.state;
+          if (isTag) {
+            const recs2 = !hasData ? st.recs : (de.act === 'move' ? st.recs.map((r) => (r.tag === de.id ? Object.assign({}, r, { tag: de.target }) : r)) : st.recs.filter((r) => r.tag !== de.id));
+            this.setState({ de: null, recs: recs2, tags: st.tags.filter((t) => t.id !== de.id) });
+          } else {
+            const ids = mTags.map((t) => t.id);
+            if (!hasData || de.act === 'drop') this.setState({ de: null, mods: st.mods.filter((x) => x.id !== de.id), tags: st.tags.filter((t) => t.mod !== de.id), recs: st.recs.filter((r) => ids.indexOf(r.tag) < 0) });
+            else this.setState({ de: null, mods: st.mods.filter((x) => x.id !== de.id), tags: st.tags.map((t) => (t.mod === de.id ? Object.assign({}, t, { mod: de.target }) : t)) });
+          }
+        }
+      };
+    }
+
+    return Object.assign({
+      cols,
+      newMod: () => {
+        const used = (this.state.mods || []).map((m) => m.pal);
+        const free = Object.keys(PAL).find((k) => used.indexOf(k) < 0) || 'blue';
+        this.setState({ me: { mode: 'new', name: '', pal: free } });
+      }
+    }, tv, mv, dv, this.syncVals());
+  }
+}
+</script>
+</body>
+</html>
