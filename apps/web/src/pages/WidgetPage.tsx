@@ -19,7 +19,7 @@ export function WidgetPage() {
     document.documentElement.style.background = 'transparent';
     document.body.style.background = 'transparent';
     document.body.style.overflow = 'hidden';
-    const iv = setInterval(() => setNowTick(nowMs()), 1000);
+    const iv = setInterval(() => setNowTick(nowMs()), 250);
     return () => clearInterval(iv);
   }, [nowMs]);
 
@@ -27,6 +27,11 @@ export function WidgetPage() {
   const runningTimers = sessions
     .filter((s) => s.deleted_at === null && s.end_at === null)
     .sort((a, b) => a.start_at - b.start_at);
+
+  const runningSignature = runningTimers.map((r) => `${r.id}:${r.start_at}`).join('|');
+  useEffect(() => {
+    setNowTick(nowMs());
+  }, [runningSignature, nowMs]);
 
   const skin = desktopConfig?.widgetSkin ?? 'light';
   const isDark = skin === 'dark';

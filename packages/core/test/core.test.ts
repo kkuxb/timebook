@@ -11,9 +11,11 @@ import {
   getWeekStart,
   isTodoScheduledOn,
   mixWithWhite,
+  resolveTodayTimelineAxis,
   shanghaiDateStartMs,
   shanghaiDateTimeToUtcMs,
   splitSessionByDay,
+  toCsv,
   toShanghaiDateStr,
   type ModuleEntity,
   type SessionEntity,
@@ -86,6 +88,60 @@ describe('@timebook/core palette & time', () => {
     expect(segs[0].durationMs).toBe(60 * 60 * 1000);
     expect(segs[1].date).toBe('2027-01-01');
     expect(segs[1].durationMs).toBe(90 * 60 * 1000);
+  });
+
+  it('resolves adaptive today timeline axis (8-24 default, 6-24 early, 0-24 midnight)', () => {
+    expect(resolveTodayTimelineAxis([])).toEqual({
+      startMin: 480,
+      endMin: 1440,
+      spanMin: 960,
+      ticks: [8, 12, 16, 20, 24],
+      hasEarlyExtension: false,
+      earlyBoundaryMin: 480,
+    });
+
+    expect(resolveTodayTimelineAxis([{ startMin: 540, endMin: 660 }])).toEqual({
+      startMin: 480,
+      endMin: 1440,
+      spanMin: 960,
+      ticks: [8, 12, 16, 20, 24],
+      hasEarlyExtension: false,
+      earlyBoundaryMin: 480,
+    });
+
+    expect(resolveTodayTimelineAxis([{ startMin: 390, endMin: 440 }, { startMin: 540, endMin: 600 }])).toEqual({
+      startMin: 360,
+      endMin: 1440,
+      spanMin: 1080,
+      ticks: [6, 12, 18, 24],
+      hasEarlyExtension: true,
+      earlyBoundaryMin: 480,
+    });
+
+    expect(resolveTodayTimelineAxis([{ startMin: 0, endMin: 90 }, { startMin: 540, endMin: 600 }])).toEqual({
+      startMin: 0,
+      endMin: 1440,
+      spanMin: 1440,
+      ticks: [0, 6, 12, 18, 24],
+      hasEarlyExtension: true,
+      earlyBoundaryMin: 480,
+    });
+  });
+
+  it('generates RFC 4180 CSV with optional UTF-8 BOM', () => {
+    const csvNoBom = toCsv(
+      ['标题', '备注'],
+      [
+        ['普通文本', 'a,b'],
+        ['带"引号"', 'line1\nline2'],
+        [null, 42],
+      ],
+    );
+    expect(csvNoBom.startsWith('\uFEFF')).toBe(false);
+    expect(csvNoBom).toBe('标题,备注\r\n普通文本,"a,b"\r\n"带""引号""","line1\nline2"\r\n,42');
+
+    const csvWithBom = toCsv(['A'], [['1']], true);
+    expect(csvWithBom).toBe('\uFEFFA\r\n1');
   });
 });
 

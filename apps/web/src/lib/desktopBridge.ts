@@ -171,8 +171,16 @@ function todayShanghaiDate(): string {
   return d.toISOString().slice(0, 10);
 }
 
+export interface FastStateBroadcastPayload {
+  revision: number;
+  sourceWindow: DesktopWindowKind;
+  instanceId: string;
+  runningSessions?: SessionEntity[];
+  clockOffsetMs?: number;
+}
+
 export interface BridgeSubscriptionHandlers {
-  onStateUpdated?: () => void;
+  onStateUpdated?: (fastPayload?: FastStateBroadcastPayload) => void;
   onConfigUpdated?: (config: DesktopConfig) => void;
   onTrayQuickStart?: (tagId: string) => void;
   onTrayAction?: (action: { action: 'stop_all' | 'stop_one'; sessionId?: string }) => void;
@@ -305,8 +313,17 @@ export const desktopBridge = {
     }
   },
 
-  async broadcastState(sourceWindow: DesktopWindowKind): Promise<void> {
-    const payload = { revision: Date.now(), sourceWindow, instanceId: INSTANCE_ID };
+  async broadcastState(
+    sourceWindow: DesktopWindowKind,
+    extra?: { runningSessions?: SessionEntity[]; clockOffsetMs?: number },
+  ): Promise<void> {
+    const payload: FastStateBroadcastPayload = {
+      revision: Date.now(),
+      sourceWindow,
+      instanceId: INSTANCE_ID,
+      ...(extra?.runningSessions ? { runningSessions: extra.runningSessions } : {}),
+      ...(typeof extra?.clockOffsetMs === 'number' ? { clockOffsetMs: extra.clockOffsetMs } : {}),
+    };
     getSyncChannel()?.postMessage({ kind: 'state-updated', ...payload });
     if (hasTauriInternals()) {
       await invoke('desktop_broadcast_state', { payload });
@@ -323,13 +340,23 @@ export const desktopBridge = {
           kind?: string;
           source?: string;
           instanceId?: string;
+          revision?: number;
+          sourceWindow?: DesktopWindowKind;
+          runningSessions?: SessionEntity[];
+          clockOffsetMs?: number;
           config?: DesktopConfig;
           tagId?: string;
           action?: { action: 'stop_all' | 'stop_one'; sessionId?: string };
         };
         if (!data || data.source === INSTANCE_ID || data.instanceId === INSTANCE_ID) return;
         if (data.kind === 'state-updated') {
-          handlers.onStateUpdated?.();
+          handlers.onStateUpdated?.({
+            revision: data.revision ?? Date.now(),
+            sourceWindow: data.sourceWindow ?? 'main',
+            instanceId: data.instanceId ?? '',
+            runningSessions: data.runningSessions,
+            clockOffsetMs: data.clockOffsetMs,
+          });
         } else if (data.kind === 'config-updated' && data.config) {
           handlers.onConfigUpdated?.(data.config);
         } else if (data.kind === 'tray-quick-start' && data.tagId) {
@@ -350,9 +377,9 @@ export const desktopBridge = {
       const tauriUnsubs: UnlistenFn[] = [];
       if (handlers.onStateUpdated) {
         tauriUnsubs.push(
-          await listen<{ instanceId?: string }>('timebook://state-updated', (ev) => {
+          await listen<FastStateBroadcastPayload>('timebook://state-updated', (ev) => {
             if (ev.payload?.instanceId === INSTANCE_ID) return;
-            handlers.onStateUpdated?.();
+            handlers.onStateUpdated?.(ev.payload);
           }),
         );
       }

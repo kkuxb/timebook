@@ -10,14 +10,12 @@ RUN corepack enable
 
 COPY package.json pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/core/package.json packages/core/tsconfig.json ./packages/core/
-COPY tools/notion-import/package.json tools/notion-import/tsconfig.json ./tools/notion-import/
 COPY apps/api/package.json apps/api/tsconfig.json ./apps/api/
 COPY apps/web/package.json apps/web/tsconfig.json ./apps/web/
 
 RUN pnpm install --frozen-lockfile || pnpm install
 
 COPY packages ./packages
-COPY tools ./tools
 COPY apps ./apps
 
 RUN pnpm -r --workspace-concurrency=1 build
@@ -38,9 +36,6 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/packages/core/package.json ./packages/core/
 COPY --from=builder /app/packages/core/dist ./packages/core/dist
 COPY --from=builder /app/packages/core/node_modules ./packages/core/node_modules
-COPY --from=builder /app/tools/notion-import/package.json ./tools/notion-import/
-COPY --from=builder /app/tools/notion-import/dist ./tools/notion-import/dist
-COPY --from=builder /app/tools/notion-import/node_modules ./tools/notion-import/node_modules
 COPY --from=builder /app/apps/api/package.json ./apps/api/
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/node_modules ./apps/api/node_modules

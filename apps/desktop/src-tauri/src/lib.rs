@@ -142,26 +142,36 @@ fn desktop_get_init_state(state: tauri::State<'_, DesktopState>) -> Result<InitS
     })
 }
 
+fn save_snapshot_with_daily_backup(
+    data_dir: &PathBuf,
+    cfg: &mut DesktopConfig,
+    snapshot: &Value,
+    today: &str,
+) -> Result<u64, String> {
+    write_local_snapshot(data_dir, snapshot)?;
+    if cfg.last_local_backup_date.as_deref() != Some(today) {
+        let backup_dir = PathBuf::from(&cfg.backup_dir);
+        if run_local_backup(data_dir, &backup_dir, today, MAX_BACKUP_KEEP).is_ok() {
+            cfg.last_local_backup_date = Some(today.to_string());
+            let _ = write_desktop_config(data_dir, cfg);
+        }
+    }
+    Ok(now_millis())
+}
+
 #[tauri::command]
 fn desktop_save_snapshot(
     state: tauri::State<'_, DesktopState>,
     snapshot: Value,
 ) -> Result<SaveSnapshotResponse, String> {
-    write_local_snapshot(&state.data_dir, &snapshot)?;
     let today = shanghai_today_str();
     let mut cfg = state
         .config
         .lock()
         .map_err(|_| "更新桌面配置锁失败".to_string())?;
-    let backup_dir = PathBuf::from(&cfg.backup_dir);
-    if run_local_backup(&state.data_dir, &backup_dir, &today, MAX_BACKUP_KEEP).is_ok() {
-        if cfg.last_local_backup_date.as_deref() != Some(&today) {
-            cfg.last_local_backup_date = Some(today);
-            let _ = write_desktop_config(&state.data_dir, &cfg);
-        }
-    }
+    let saved_at = save_snapshot_with_daily_backup(&state.data_dir, &mut cfg, &snapshot, &today)?;
     Ok(SaveSnapshotResponse {
-        saved_at: now_millis(),
+        saved_at,
         last_local_backup_date: cfg.last_local_backup_date.clone(),
     })
 }
@@ -645,5 +655,39 @@ mod tests {
         };
         assert_eq!(format_tray_tooltip(&busy), "时间簿（NAS 同步）· 2 个专注进行中");
         assert_eq!(truncate_label("这是一个超长的事项标题名称", 6), "这是一个超…");
+    }
+
+    #[test]
+    fn test_save_snapshot_skips_redundant_daily_backup() {
+        let dir = make_temp_dir("tb-rust-dedup-bk");
+        let backup_dir = dir.join("backups");
+        let mut cfg = read_desktop_config(&dir, &backup_dir);
+        let today = "2026-11-19";
+
+        // 首次保存：生成当日备份并更新 last_local_backup_date
+        let snap1 = json!({ "version": 1, "savedAt": 100, "marker": "first" });
+        super::save_snapshot_with_daily_backup(&dir, &mut cfg, &snap1, today).unwrap();
+        assert_eq!(cfg.last_local_backup_date.as_deref(), Some(today));
+
+        let backup_file = backup_dir.join(format!("timebook-local-{today}.json"));
+        assert!(backup_file.exists());
+        let first_backup_content = fs::read_to_string(&backup_file).unwrap();
+        assert!(first_backup_content.contains("\"first\""));
+
+        // 同日第二次保存：仅更新主快照 timebook-local.json，不重复重写当日备份文件
+        let snap2 = json!({ "version": 1, "savedAt": 200, "marker": "second" });
+        super::save_snapshot_with_daily_backup(&dir, &mut cfg, &snap2, today).unwrap();
+
+        let main_snap = read_local_snapshot(&dir).unwrap().unwrap();
+        assert_eq!(main_snap["marker"], "second");
+        let second_backup_content = fs::read_to_string(&backup_file).unwrap();
+        assert_eq!(second_backup_content, first_backup_content);
+
+        // 手动触发 run_local_backup 仍可强制刷新当日备份
+        run_local_backup(&dir, &backup_dir, today, MAX_BACKUP_KEEP).unwrap();
+        let forced_backup_content = fs::read_to_string(&backup_file).unwrap();
+        assert!(forced_backup_content.contains("\"second\""));
+
+        fs::remove_dir_all(&dir).unwrap();
     }
 }

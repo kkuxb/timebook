@@ -27,11 +27,12 @@ import {
   getDesktopWindowKind,
   isDesktopEnvironment,
   type DesktopConfig,
+  type FastStateBroadcastPayload,
   type LocalSnapshotFile,
 } from '../lib/desktopBridge.js';
 import { buildTagLookup, formatSessionDisplayTitle } from '../lib/labels.js';
 
-export type NavTab = 'today' | 'calendar' | 'stats' | 'tags';
+export type NavTab = 'today' | 'calendar' | 'history' | 'stats' | 'tags';
 export type AuthState = 'checking' | 'unauthenticated' | 'authenticated';
 export type SyncStatus = 'ok' | 'saving' | 'offline' | 'db_error';
 
@@ -104,6 +105,7 @@ interface AppState {
   refreshAfterServerAction: () => Promise<void>;
 
   syncFromBridgeUpdate: () => Promise<void>;
+  applyFastRunningFromBridge: (payload?: FastStateBroadcastPayload) => void;
   applyConfigFromBridge: (config: DesktopConfig) => void;
   updateDesktopConfig: (patch: Partial<DesktopConfig>) => Promise<{ ok: boolean; error?: string }>;
   runDesktopBackup: () => Promise<{ ok: boolean; path?: string; error?: string }>;
@@ -117,6 +119,11 @@ interface AppState {
 
   startTimer: (opts: { tagId: string | null; title: string | null; todoId?: string | null }) => Promise<string>;
   updateSession: (session: SessionEntity) => Promise<void>;
+  batchUpdateSessions: (
+    ids: string[],
+    patch: { tag_id?: string | null; title?: string | null },
+  ) => Promise<void>;
+  batchDeleteSessions: (ids: string[]) => Promise<void>;
   cancelRunningTimer: (sessionId: string) => Promise<void>;
   endTimer: (sessionId: string) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
@@ -153,6 +160,23 @@ function buildLocalSnapshotFile(state: Pick<AppState, 'modules' | 'tags' | 'sess
     todos: state.todos,
     todoChecks: state.todoChecks,
   };
+}
+
+function emitFastRunningBroadcast(wakeWidgetIfRunning = false): void {
+  const state = useAppStore.getState();
+  if (!state.isDesktop) return;
+  const runningSessions = state.sessions
+    .filter((s) => s.deleted_at === null && s.end_at === null)
+    .sort((a, b) => a.start_at - b.start_at);
+  void desktopBridge
+    .broadcastState(getDesktopWindowKind(), {
+      runningSessions,
+      clockOffsetMs: state.clockOffsetMs,
+    })
+    .catch(() => undefined);
+  if (wakeWidgetIfRunning && runningSessions.length > 0 && state.desktopConfig?.widgetVisible) {
+    void desktopBridge.setWidgetVisibility(true).catch(() => undefined);
+  }
 }
 
 async function persistDesktopDiskAndTray(opts?: { broadcast?: boolean; wakeWidgetIfRunning?: boolean }): Promise<void> {
@@ -236,7 +260,12 @@ async function persistDesktopDiskAndTray(opts?: { broadcast?: boolean; wakeWidge
   }
 
   if (opts?.broadcast) {
-    await desktopBridge.broadcastState(getDesktopWindowKind()).catch(() => undefined);
+    await desktopBridge
+      .broadcastState(getDesktopWindowKind(), {
+        runningSessions,
+        clockOffsetMs: state.clockOffsetMs,
+      })
+      .catch(() => undefined);
   }
 }
 
@@ -502,6 +531,7 @@ async function flushPendingQueue(): Promise<boolean> {
     while (true) {
       const batch: PendingMutationRecord[] = await localDb.pendingMutations
         .orderBy('seq')
+        .limit(300)
         .toArray();
       if (batch.length === 0) break;
 
@@ -655,6 +685,67 @@ async function fetchStatusMeta(): Promise<void> {
     }
   } catch {
     // 非关键元信息失败忽略
+  }
+}
+
+async function commitSessionBatch(
+  nextSessions: SessionEntity[],
+  changedSessions: SessionEntity[],
+  pendingItems: PendingMutationRecord[],
+  set: (partial: Partial<AppState>) => void,
+  get: () => AppState,
+): Promise<void> {
+  const isLocalDesktop =
+    get().isDesktop && get().desktopConfig?.connectionMode === 'local';
+
+  if (isLocalDesktop) {
+    const savedAt = Date.now();
+    set({
+      sessions: nextSessions,
+      pendingCount: 0,
+      syncStatus: 'ok',
+      lastSavedAt: savedAt,
+      lastError: null,
+    });
+    emitFastRunningBroadcast(false);
+    await Promise.all([
+      localDb.sessions.bulkPut(changedSessions),
+      localDb.meta.put({ key: 'lastSavedAt', value: savedAt }),
+    ]);
+    await persistDesktopDiskAndTray({ broadcast: true });
+    return;
+  }
+
+  set({
+    sessions: nextSessions,
+    pendingCount: get().pendingCount + pendingItems.length,
+    syncStatus: 'saving',
+  });
+  emitFastRunningBroadcast(false);
+
+  await Promise.all([
+    localDb.sessions.bulkPut(changedSessions),
+    localDb.pendingMutations.bulkAdd(pendingItems),
+  ]);
+
+  const pendingCount = await localDb.pendingMutations.count();
+  set({ pendingCount });
+
+  if (get().isDesktop) {
+    await persistDesktopDiskAndTray({ broadcast: true });
+  }
+
+  const ok = await flushPendingQueue();
+  if (ok && get().authState === 'authenticated') {
+    try {
+      await pullSyncDelta(false);
+      if ((await localDb.pendingMutations.count()) === 0) {
+        set({ syncStatus: 'ok', pendingCount: 0, lastError: null });
+      }
+    } catch {
+      set({ syncStatus: 'offline' });
+      scheduleRetry();
+    }
   }
 }
 
@@ -996,6 +1087,24 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
   },
 
+  applyFastRunningFromBridge: (payload) => {
+    if (!get().isDesktop) return;
+    if (payload?.runningSessions) {
+      const incoming = payload.runningSessions;
+      const incomingIds = new Set(incoming.map((r) => r.id));
+      const nonRunning = get().sessions.filter(
+        (s) => (s.deleted_at !== null || s.end_at !== null) && !incomingIds.has(s.id),
+      );
+      set({
+        sessions: [...nonRunning, ...incoming],
+        ...(typeof payload.clockOffsetMs === 'number'
+          ? { clockOffsetMs: payload.clockOffsetMs }
+          : {}),
+      });
+    }
+    void get().syncFromBridgeUpdate();
+  },
+
   applyConfigFromBridge: (config: DesktopConfig) => {
     set({ desktopConfig: config });
   },
@@ -1172,18 +1281,25 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { patch, dbTasks } = applyOptimisticMutation(get(), item, now);
     const isLocalDesktop =
       get().isDesktop && get().desktopConfig?.connectionMode === 'local';
+    const wakeWidget = item.type === 'session.upsert';
 
     if (isLocalDesktop) {
-      await Promise.all(dbTasks);
       const savedAt = Date.now();
-      await localDb.meta.put({ key: 'lastSavedAt', value: savedAt });
       set({ ...patch, pendingCount: 0, syncStatus: 'ok', lastSavedAt: savedAt, lastError: null });
+      emitFastRunningBroadcast(wakeWidget);
+      await Promise.all([
+        ...dbTasks,
+        localDb.meta.put({ key: 'lastSavedAt', value: savedAt }),
+      ]);
       await persistDesktopDiskAndTray({
         broadcast: true,
-        wakeWidgetIfRunning: item.type === 'session.upsert',
+        wakeWidgetIfRunning: wakeWidget,
       });
       return;
     }
+
+    set({ ...patch, pendingCount: get().pendingCount + 1, syncStatus: 'saving' });
+    emitFastRunningBroadcast(wakeWidget);
 
     await Promise.all([
       ...dbTasks,
@@ -1196,12 +1312,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     ]);
 
     const pendingCount = await localDb.pendingMutations.count();
-    set({ ...patch, pendingCount, syncStatus: 'saving' });
+    set({ pendingCount });
 
     if (get().isDesktop) {
       await persistDesktopDiskAndTray({
         broadcast: true,
-        wakeWidgetIfRunning: item.type === 'session.upsert',
+        wakeWidgetIfRunning: wakeWidget,
       });
     }
 
@@ -1254,6 +1370,76 @@ export const useAppStore = create<AppState>((set, get) => ({
         created_at: session.created_at,
       },
     });
+  },
+
+  batchUpdateSessions: async (ids, patch) => {
+    const idSet = new Set(ids);
+    if (idSet.size === 0) return;
+    const hasTagPatch = 'tag_id' in patch;
+    const hasTitlePatch = 'title' in patch;
+    if (!hasTagPatch && !hasTitlePatch) return;
+
+    const now = get().nowMs();
+    const updatedSessions: SessionEntity[] = [];
+    const pendingItems: PendingMutationRecord[] = [];
+    const nextSessions = get().sessions.map((s) => {
+      if (!idSet.has(s.id) || s.deleted_at !== null || s.end_at === null) return s;
+      const updated: SessionEntity = {
+        ...s,
+        tag_id: hasTagPatch ? (patch.tag_id ?? null) : s.tag_id,
+        title: hasTitlePatch ? (patch.title ?? null) : s.title,
+        updated_at: now,
+      };
+      updatedSessions.push(updated);
+      pendingItems.push({
+        mutation_id: ulid(),
+        type: 'session.upsert',
+        payload: {
+          id: updated.id,
+          tag_id: updated.tag_id,
+          todo_id: updated.todo_id,
+          title: updated.title,
+          start_at: updated.start_at,
+          end_at: updated.end_at,
+          source: updated.source,
+          import_batch: updated.import_batch,
+          created_at: updated.created_at,
+        },
+        createdAt: now,
+      });
+      return updated;
+    });
+
+    if (updatedSessions.length === 0) return;
+    await commitSessionBatch(nextSessions, updatedSessions, pendingItems, set, get);
+  },
+
+  batchDeleteSessions: async (ids) => {
+    const idSet = new Set(ids);
+    if (idSet.size === 0) return;
+
+    const now = get().nowMs();
+    const deletedSessions: SessionEntity[] = [];
+    const pendingItems: PendingMutationRecord[] = [];
+    const nextSessions = get().sessions.map((s) => {
+      if (!idSet.has(s.id) || s.deleted_at !== null || s.end_at === null) return s;
+      const updated: SessionEntity = {
+        ...s,
+        deleted_at: now,
+        updated_at: now,
+      };
+      deletedSessions.push(updated);
+      pendingItems.push({
+        mutation_id: ulid(),
+        type: 'session.delete',
+        payload: { id: updated.id },
+        createdAt: now,
+      });
+      return updated;
+    });
+
+    if (deletedSessions.length === 0) return;
+    await commitSessionBatch(nextSessions, deletedSessions, pendingItems, set, get);
   },
 
   cancelRunningTimer: async (sessionId) => {

@@ -55,7 +55,6 @@ export default defineConfig({
   resolve: {
     alias: {
       '@timebook/core': path.resolve(here, '../../packages/core/src/index.ts'),
-      '@timebook/notion-import': path.resolve(here, '../../tools/notion-import/src/index.ts'),
     },
   },
   server: {

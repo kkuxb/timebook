@@ -5,6 +5,7 @@ import { SyncStatusPill } from './SyncStatusPill.js';
 const TABS: Array<{ id: NavTab; label: string }> = [
   { id: 'today', label: '今日' },
   { id: 'calendar', label: '日历' },
+  { id: 'history', label: '历史' },
   { id: 'stats', label: '统计' },
   { id: 'tags', label: '标签' },
 ];
@@ -77,7 +78,7 @@ export function DesktopTitlebar() {
         </div>
       </div>
 
-      {/* 居中四栏分段导航 */}
+      {/* 居中五栏分段导航 */}
       <nav
         aria-label="主导航"
         style={{
@@ -100,7 +101,7 @@ export function DesktopTitlebar() {
               className={active ? 'btn dark' : 'btn'}
               style={{
                 height: 32,
-                padding: '0 16px',
+                padding: '0 14px',
                 borderRadius: 9,
                 fontSize: 13,
                 color: active ? '#FFFFFF' : '#4B5263',

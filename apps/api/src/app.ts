@@ -19,11 +19,8 @@ import { createDatabase, type DbContext } from './db/client.js';
 import {
   exportDatabaseJson,
   exportSessionsCsv,
-  importNotionBatch,
-  listImportBatches,
   listTrashItems,
   restoreTrashItem,
-  undoImportBatch,
 } from './import-export.js';
 import { applyMutationsBatch, MutationConflictError, querySyncSince } from './sync.js';
 
@@ -192,32 +189,6 @@ export function createApp(options: CreateAppOptions = {}) {
         500,
       );
     }
-  });
-
-  protectedApi.post('/import/notion', async (c) => {
-    try {
-      const body = await c.req.json();
-      const res = importNotionBatch(ctx, body);
-      return c.json({ ok: true, ...res });
-    } catch (err) {
-      if (err instanceof z.ZodError) {
-        return c.json({ ok: false, error: '导入载荷格式无效', details: err.flatten() }, 400);
-      }
-      return c.json(
-        { ok: false, error: err instanceof Error ? err.message : '导入失败' },
-        500,
-      );
-    }
-  });
-
-  protectedApi.get('/import/batches', (c) => {
-    return c.json({ ok: true, batches: listImportBatches(ctx) });
-  });
-
-  protectedApi.delete('/import/:batchId', (c) => {
-    const batchId = c.req.param('batchId');
-    const res = undoImportBatch(ctx, batchId);
-    return c.json(res);
   });
 
   protectedApi.get('/export', (c) => {

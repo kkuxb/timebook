@@ -5,3 +5,5 @@ export * from './gaps.js';
 export * from './stats.js';
 export * from './todos.js';
 export * from './merge.js';
+export * from './csv.js';
+export * from './history.js';

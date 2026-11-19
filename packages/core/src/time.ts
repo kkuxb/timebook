@@ -272,3 +272,63 @@ export function hmToMinutes(hm: string): number | null {
   if (h < 0 || h > 23 || m < 0 || m > 59) return null;
   return h * 60 + m;
 }
+
+export interface TodayTimelineAxis {
+  startMin: number;
+  endMin: 1440;
+  spanMin: number;
+  ticks: number[];
+  hasEarlyExtension: boolean;
+  earlyBoundaryMin: 480;
+}
+
+/**
+ * 根据当日专注片段自动计算今日页时间横条的起点与整点刻度：
+ * - 默认（无早于 08:00 的记录或空记录日）：08:00–24:00，刻度 [8, 12, 16, 20, 24]
+ * - 早起（06:00–07:59 有记录）：06:00–24:00，刻度 [6, 12, 18, 24]
+ * - 凌晨（00:00–05:59 有记录）：00:00–24:00，刻度 [0, 6, 12, 18, 24]
+ */
+export function resolveTodayTimelineAxis(
+  segments: ReadonlyArray<{ startMin: number; endMin: number }>,
+): TodayTimelineAxis {
+  let minStartMin = Infinity;
+  for (const seg of segments) {
+    if (seg.endMin > seg.startMin) {
+      const clampedStart = Math.max(0, seg.startMin);
+      if (clampedStart < minStartMin) {
+        minStartMin = clampedStart;
+      }
+    }
+  }
+
+  if (minStartMin === Infinity || minStartMin >= 480) {
+    return {
+      startMin: 480,
+      endMin: 1440,
+      spanMin: 960,
+      ticks: [8, 12, 16, 20, 24],
+      hasEarlyExtension: false,
+      earlyBoundaryMin: 480,
+    };
+  }
+
+  if (minStartMin >= 360) {
+    return {
+      startMin: 360,
+      endMin: 1440,
+      spanMin: 1080,
+      ticks: [6, 12, 18, 24],
+      hasEarlyExtension: true,
+      earlyBoundaryMin: 480,
+    };
+  }
+
+  return {
+    startMin: 0,
+    endMin: 1440,
+    spanMin: 1440,
+    ticks: [0, 6, 12, 18, 24],
+    hasEarlyExtension: true,
+    earlyBoundaryMin: 480,
+  };
+}

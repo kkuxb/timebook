@@ -165,6 +165,15 @@ pub fn setup_tray<R: Runtime>(
                 }
                 _ if id.starts_with("start_tag:") => {
                     let tag_id = &id[10..];
+                    let widget_visible = app
+                        .try_state::<crate::DesktopState>()
+                        .and_then(|s| s.config.lock().ok().map(|c| c.widget_visible))
+                        .unwrap_or(false);
+                    if widget_visible {
+                        if let Some(win) = app.get_webview_window("widget") {
+                            let _ = win.show();
+                        }
+                    }
                     let _ = app.emit_to(
                         "main",
                         "timebook://tray-quick-start",

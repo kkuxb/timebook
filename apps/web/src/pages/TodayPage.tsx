@@ -12,6 +12,7 @@ import {
   getTodayTodos,
   getWeekdayLabel,
   minutesToHm,
+  resolveTodayTimelineAxis,
   splitSessionByDay,
   toShanghaiDateStr,
   type SessionEntity,
@@ -130,6 +131,7 @@ export function TodayPage() {
     daySegments.map((seg) => ({ startMin: seg.startMin, endMin: seg.endMin })),
     20,
   );
+  const axis = resolveTodayTimelineAxis(daySegments);
 
   type TimelineRow =
     | { kind: 'seg'; key: string; sortKey: number; seg: TimelineSeg }
@@ -763,9 +765,11 @@ export function TodayPage() {
               </button>
             </div>
 
-            {/* 0-24h 比例条 */}
+            {/* 自适应起点时间比例条（日常 8–24 点，早起 6–24 点，凌晨 0–24 点） */}
             <div>
               <div
+                data-testid="today-timeline-bar"
+                data-axis-start={axis.startMin}
                 style={{
                   position: 'relative',
                   height: 28,
@@ -774,27 +778,52 @@ export function TodayPage() {
                   overflow: 'hidden',
                 }}
               >
-                {gaps.map((g, idx) => (
-                  <button
-                    key={`g-${idx}`}
-                    type="button"
-                    onClick={() => openGapModal(g.startMin, g.endMin)}
-                    className="gapseg"
-                    aria-label={`没有记录 ${minutesToHm(g.startMin)}–${minutesToHm(g.endMin)}，点击补上`}
-                    title={`没有记录 ${minutesToHm(g.startMin)}–${minutesToHm(g.endMin)}，点击补上`}
+                {axis.hasEarlyExtension && (
+                  <div
+                    data-testid="timeline-early-zone"
+                    aria-hidden="true"
                     style={{
                       position: 'absolute',
                       top: 0,
                       bottom: 0,
-                      left: `${((g.startMin / 1440) * 100).toFixed(2)}%`,
-                      width: `${(((g.endMin - g.startMin) / 1440) * 100).toFixed(2)}%`,
-                      borderRadius: 4,
+                      left: '0%',
+                      width: `${(((axis.earlyBoundaryMin - axis.startMin) / axis.spanMin) * 100).toFixed(4)}%`,
+                      background:
+                        'repeating-linear-gradient(135deg, rgba(17, 24, 39, 0.04) 0 4px, transparent 4px 8px)',
+                      borderRight: '1px dashed #D5D9E2',
+                      pointerEvents: 'none',
                     }}
                   />
-                ))}
+                )}
+                {gaps.map((g, idx) => {
+                  const sClamped = Math.max(axis.startMin, g.startMin);
+                  const eClamped = Math.min(axis.endMin, g.endMin);
+                  if (eClamped <= sClamped) return null;
+                  return (
+                    <button
+                      key={`g-${idx}`}
+                      type="button"
+                      onClick={() => openGapModal(g.startMin, g.endMin)}
+                      className="gapseg"
+                      aria-label={`没有记录 ${minutesToHm(g.startMin)}–${minutesToHm(g.endMin)}，点击补上`}
+                      title={`没有记录 ${minutesToHm(g.startMin)}–${minutesToHm(g.endMin)}，点击补上`}
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        bottom: 0,
+                        left: `${(((sClamped - axis.startMin) / axis.spanMin) * 100).toFixed(2)}%`,
+                        width: `${(((eClamped - sClamped) / axis.spanMin) * 100).toFixed(2)}%`,
+                        borderRadius: 4,
+                      }}
+                    />
+                  );
+                })}
                 {daySegments.map((seg, idx) => {
+                  const sClamped = Math.max(axis.startMin, seg.startMin);
+                  const eClamped = Math.min(axis.endMin, seg.endMin);
+                  if (eClamped <= sClamped) return null;
                   const st = getTagStyle(seg.session.tag_id, lookup);
-                  const wPct = Math.max(0.5, ((seg.endMin - seg.startMin) / 1440) * 100);
+                  const wPct = Math.max(0.5, ((eClamped - sClamped) / axis.spanMin) * 100);
                   return (
                     <div
                       key={`s-${idx}`}
@@ -804,7 +833,7 @@ export function TodayPage() {
                         position: 'absolute',
                         top: 0,
                         bottom: 0,
-                        left: `${((seg.startMin / 1440) * 100).toFixed(2)}%`,
+                        left: `${(((sClamped - axis.startMin) / axis.spanMin) * 100).toFixed(2)}%`,
                         width: `${wPct.toFixed(2)}%`,
                         backgroundColor: st.color,
                         borderRadius: 4,
@@ -815,6 +844,7 @@ export function TodayPage() {
                 })}
               </div>
               <div
+                data-testid="today-timeline-ticks"
                 className="tnum"
                 style={{
                   display: 'flex',
@@ -825,11 +855,9 @@ export function TodayPage() {
                   color: '#9CA3AF',
                 }}
               >
-                <span>0</span>
-                <span>6</span>
-                <span>12</span>
-                <span>18</span>
-                <span>24</span>
+                {axis.ticks.map((tick) => (
+                  <span key={tick}>{tick}</span>
+                ))}
               </div>
             </div>
 

@@ -6,6 +6,7 @@ import { SyncStatusPill } from './SyncStatusPill.js';
 const TABS: Array<{ id: NavTab; label: string }> = [
   { id: 'today', label: '今日' },
   { id: 'calendar', label: '日历' },
+  { id: 'history', label: '历史' },
   { id: 'stats', label: '统计' },
   { id: 'tags', label: '标签' },
 ];
@@ -165,8 +166,9 @@ export function AppShell({ children }: { children: ReactNode }) {
               className="btn"
               style={{
                 height: 44,
+                padding: '0 4px',
                 borderRadius: 12,
-                fontSize: 13,
+                fontSize: 12,
                 background: active ? '#111827' : 'transparent',
                 color: active ? '#FFFFFF' : '#4B5263',
               }}

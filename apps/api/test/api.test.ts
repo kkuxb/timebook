@@ -245,7 +245,7 @@ describe('@timebook/api integration', () => {
     }
   });
 
-  it('imports Notion batch, exposes via sync, undoes with soft-delete propagation, exports & backs up SQLite', async () => {
+  it('returns 404 for retired Notion import routes and preserves legacy source=import sessions across sync, export, trash and backup', async () => {
     const { app, ctx } = createTempApp('pw');
     try {
       const loginRes = await app.request('/api/login', {
@@ -255,63 +255,101 @@ describe('@timebook/api integration', () => {
       });
       const cookie = extractCookie(loginRes);
 
-      const impRes = await app.request('/api/import/notion', {
+      // 1. 已下线的 Notion 导入路由全部返回 404
+      const impPostRes = await app.request('/api/import/notion', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Cookie: cookie },
-        body: JSON.stringify({
-          batchName: '测试批次',
-          modules: [{ name: '工作', color_key: 'blue' }],
-          tags: [{ moduleName: '工作', name: '个人工作' }],
-          sessions: [
-            {
-              tagName: '个人工作',
-              moduleName: '工作',
-              title: 'FDE开发',
-              start_at: Date.UTC(2026, 10, 18, 1, 0, 0),
-              end_at: Date.UTC(2026, 10, 18, 3, 0, 0),
-            },
-          ],
-          todos: [{ title: '旧待办', tagName: null, plan_date: null, due_date: null }],
-        }),
+        body: JSON.stringify({}),
       });
-      expect(impRes.status).toBe(200);
-      const impJson = (await impRes.json()) as { batchId: string; importedSessions: number; cursor: number };
-      expect(impJson.importedSessions).toBe(1);
+      expect(impPostRes.status).toBe(404);
 
-      // 导出 CSV 和 JSON
-      const csvRes = await app.request('/api/export?format=csv', { headers: { Cookie: cookie } });
-      expect(csvRes.status).toBe(200);
-      const csvText = await csvRes.text();
-      expect(csvText).toContain('FDE开发');
+      const batchesRes = await app.request('/api/import/batches', {
+        headers: { Cookie: cookie },
+      });
+      expect(batchesRes.status).toBe(404);
 
-      const jsonRes = await app.request('/api/export?format=json', { headers: { Cookie: cookie } });
-      expect(jsonRes.status).toBe(200);
-
-      // 整批撤销前记录 cursor
-      const beforeUndoCursor = impJson.cursor;
-      const undoRes = await app.request(`/api/import/${impJson.batchId}`, {
+      const undoRes = await app.request('/api/import/legacy-batch-1', {
         method: 'DELETE',
         headers: { Cookie: cookie },
       });
-      expect(undoRes.status).toBe(200);
+      expect(undoRes.status).toBe(404);
 
-      // 增量同步能拿到被软删除的 session、todo 与本批独占新建的 tag
-      const deltaSync = (await (
-        await app.request(`/api/sync?since=${beforeUndoCursor}`, { headers: { Cookie: cookie } })
+      // 2. 注入模拟存量库（含 source='import' 与 import_batch='legacy-batch-1'）
+      const sync0 = (await (
+        await app.request('/api/sync?since=0', { headers: { Cookie: cookie } })
+      ).json()) as { modules: Array<{ id: string; name: string }> };
+      const workModId = sync0.modules[0].id;
+      const now = Date.now();
+      ctx.sqlite
+        .prepare(
+          'INSERT INTO tags (id, module_id, name, sort, created_at, updated_at, deleted_at) VALUES (?, ?, ?, 0, ?, ?, NULL)',
+        )
+        .run('tag-legacy-1', workModId, '个人工作', now, now);
+      ctx.sqlite
+        .prepare(
+          'INSERT INTO sessions (id, tag_id, todo_id, title, start_at, end_at, source, import_batch, created_at, updated_at, deleted_at) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, NULL)',
+        )
+        .run(
+          'sess-legacy-import-1',
+          'tag-legacy-1',
+          'FDE存量历史',
+          Date.UTC(2026, 10, 18, 1, 0, 0),
+          Date.UTC(2026, 10, 18, 3, 0, 0),
+          'import',
+          'legacy-batch-1',
+          now,
+          now,
+        );
+
+      // 3. /api/sync、/api/export(csv/json) 100% 兼容存量导入数据
+      const syncAfter = (await (
+        await app.request('/api/sync?since=0', { headers: { Cookie: cookie } })
       ).json()) as {
-        sessions: Array<{ deleted_at: number | null; import_batch: string | null }>;
-        todos: Array<{ title: string; deleted_at: number | null }>;
-        tags: Array<{ name: string; deleted_at: number | null }>;
+        sessions: Array<{ id: string; source: string; import_batch: string | null }>;
       };
-      expect(deltaSync.sessions).toHaveLength(1);
-      expect(deltaSync.sessions[0].deleted_at).not.toBeNull();
-      expect(deltaSync.sessions[0].import_batch).toBe(impJson.batchId);
-      expect(deltaSync.todos).toHaveLength(1);
-      expect(deltaSync.todos[0].title).toBe('旧待办');
-      expect(deltaSync.todos[0].deleted_at).not.toBeNull();
-      expect(deltaSync.tags).toHaveLength(1);
-      expect(deltaSync.tags[0].name).toBe('个人工作');
-      expect(deltaSync.tags[0].deleted_at).not.toBeNull();
+      const foundSess = syncAfter.sessions.find((s) => s.id === 'sess-legacy-import-1');
+      expect(foundSess).toBeDefined();
+      expect(foundSess!.source).toBe('import');
+      expect(foundSess!.import_batch).toBe('legacy-batch-1');
+
+      const csvRes = await app.request('/api/export?format=csv', { headers: { Cookie: cookie } });
+      expect(csvRes.status).toBe(200);
+      const csvText = await csvRes.text();
+      expect(csvText).toContain('FDE存量历史');
+      expect(csvText).toContain('import');
+
+      const jsonRes = await app.request('/api/export?format=json', { headers: { Cookie: cookie } });
+      expect(jsonRes.status).toBe(200);
+      const jsonExport = (await jsonRes.json()) as { version: string; sessions: Array<{ id: string }> };
+      expect(jsonExport.version).toBe('0.2.0');
+      expect(jsonExport.sessions.some((s) => s.id === 'sess-legacy-import-1')).toBe(true);
+
+      // 4. 软删除存量导入记录后可在回收站恢复
+      const delSessRes = await app.request('/api/mutations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({
+          mutations: [
+            {
+              mutation_id: 'mut-del-legacy-1',
+              type: 'session.delete',
+              payload: { id: 'sess-legacy-import-1' },
+            },
+          ],
+        }),
+      });
+      expect(delSessRes.status).toBe(200);
+
+      const trashRes = await app.request('/api/trash', { headers: { Cookie: cookie } });
+      const trashJson = (await trashRes.json()) as { items: Array<{ kind: string; id: string }> };
+      expect(trashJson.items.some((x) => x.kind === 'session' && x.id === 'sess-legacy-import-1')).toBe(true);
+
+      const restoreRes = await app.request('/api/trash/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({ kind: 'session', id: 'sess-legacy-import-1' }),
+      });
+      expect(restoreRes.status).toBe(200);
 
       // 验证空模块 drop 删除无需 targetModuleId 且成功软删除
       const addEmptyMod = await app.request('/api/mutations', {

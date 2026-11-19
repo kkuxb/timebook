@@ -530,9 +530,9 @@ select:focus-visible {
     backdrop-filter: blur(8px);
     border-top: 1px solid var(--tb-border);
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 4px;
-    padding: 6px 10px calc(8px + env(safe-area-inset-bottom));
+    grid-template-columns: repeat(5, 1fr);
+    gap: 2px;
+    padding: 6px 6px calc(8px + env(safe-area-inset-bottom));
   }
 
   .tb-mini-bar {
@@ -560,6 +560,76 @@ select:focus-visible {
 
   .drawer-panel {
     padding: 20px;
+  }
+}
+
+/* —— 历史记录列表与批量浮栏 —— */
+.tb-history-head {
+  display: grid;
+  grid-template-columns: 32px 128px 152px minmax(0, 1fr) 156px 96px 56px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--tb-divider);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--tb-text-muted);
+}
+
+.tb-history-row {
+  display: grid;
+  grid-template-columns: 32px 128px 152px minmax(0, 1fr) 156px 96px 56px;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--tb-divider);
+  transition: background-color 0.16s ease;
+}
+
+.tb-history-row:hover {
+  background: var(--tb-input-bg);
+}
+
+.tb-history-row.is-selected {
+  background: #FFFBEB;
+}
+
+.tb-history-batch-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 35;
+  width: min(920px, calc(100vw - 32px));
+}
+
+@media (max-width: 767px) {
+  .tb-history-head {
+    display: none;
+  }
+
+  .tb-history-row {
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    grid-template-areas:
+      'chk date dur'
+      'chk tag act'
+      'chk title title'
+      'chk time time';
+    gap: 6px 10px;
+    padding: 12px 14px;
+  }
+
+  .tb-h-chk { grid-area: chk; }
+  .tb-h-date { grid-area: date; }
+  .tb-h-tag { grid-area: tag; }
+  .tb-h-title { grid-area: title; }
+  .tb-h-time { grid-area: time; }
+  .tb-h-dur { grid-area: dur; justify-self: end; }
+  .tb-h-act { grid-area: act; justify-self: end; }
+
+  .tb-history-batch-bar {
+    bottom: calc(68px + env(safe-area-inset-bottom));
+    width: calc(100vw - 20px);
   }
 }
 

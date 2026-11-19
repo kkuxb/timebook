@@ -1,6 +1,6 @@
 {
   "name": "@timebook/web",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,7 +12,6 @@
   "dependencies": {
     "@tauri-apps/api": "^2.2.0",
     "@timebook/core": "workspace:*",
-    "@timebook/notion-import": "workspace:*",
     "date-fns": "^4.1.0",
     "date-fns-tz": "^3.2.0",
     "dexie": "^4.0.11",

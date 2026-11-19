@@ -13,8 +13,7 @@
 
 ## 目录与数据
 
-- `packages/core/`：前后端共享的 `TypeScript` 类型、`Zod` 校验、周期计算、跨天切分、空档检测、统计聚合与重复待办纯函数及单元测试。
-- `tools/notion-import/`：`Notion` 导出 `CSV` 的解析、字段映射、异常检测与统计对账逻辑（前后端可共用）。
+- `packages/core/`：前后端共享的 `TypeScript` 类型、`Zod` 校验、周期计算、跨天切分、空档检测、历史检索筛选、统计聚合、重复待办及 `CSV` 导出纯函数与单元测试（原 `tools/notion-import/` 已按 `v0.2.0` `C-13` 决定正式下线移除）。
 - `apps/api/`：`Hono` 服务端、`Drizzle ORM` 与 `SQLite` 数据层、鉴权、增量同步、幂等提交、导入导出、健康检查与定时备份。
 - `apps/web/`：`React + Vite` 前端单页应用、`Dexie`（`IndexedDB`）离线队列与 `PWA` 配置。
 - `prototype/`：已定稿的交互原型参考源码（只读参考，不直接修改）。

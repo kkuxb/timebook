@@ -3,6 +3,7 @@ import { AppShell } from './components/AppShell.js';
 import { SettingsDrawer } from './components/SettingsDrawer.js';
 import { desktopBridge, getDesktopWindowKind, isDesktopEnvironment } from './lib/desktopBridge.js';
 import { CalendarPage } from './pages/CalendarPage.js';
+import { HistoryPage } from './pages/HistoryPage.js';
 import { LauncherPage } from './pages/LauncherPage.js';
 import { LoginPage } from './pages/LoginPage.js';
 import { StatsPage } from './pages/StatsPage.js';
@@ -16,7 +17,7 @@ export function App() {
   const activeTab = useAppStore((s) => s.activeTab);
   const init = useAppStore((s) => s.init);
   const checkHealthAndSync = useAppStore((s) => s.checkHealthAndSync);
-  const syncFromBridgeUpdate = useAppStore((s) => s.syncFromBridgeUpdate);
+  const applyFastRunningFromBridge = useAppStore((s) => s.applyFastRunningFromBridge);
   const applyConfigFromBridge = useAppStore((s) => s.applyConfigFromBridge);
   const startTimer = useAppStore((s) => s.startTimer);
   const endTimer = useAppStore((s) => s.endTimer);
@@ -34,8 +35,8 @@ export function App() {
     let unsub: (() => void) | null = null;
     void desktopBridge
       .subscribe({
-        onStateUpdated: () => {
-          void syncFromBridgeUpdate();
+        onStateUpdated: (fastPayload) => {
+          applyFastRunningFromBridge(fastPayload);
         },
         onConfigUpdated: (cfg) => {
           applyConfigFromBridge(cfg);
@@ -73,7 +74,7 @@ export function App() {
     return () => {
       unsub?.();
     };
-  }, [windowKind, syncFromBridgeUpdate, applyConfigFromBridge, startTimer, endTimer, updateDesktopConfig]);
+  }, [windowKind, applyFastRunningFromBridge, applyConfigFromBridge, startTimer, endTimer, updateDesktopConfig]);
 
   useEffect(() => {
     if (authState !== 'authenticated' || windowKind !== 'main') return;
@@ -138,6 +139,7 @@ export function App() {
     <AppShell>
       {activeTab === 'today' && <TodayPage />}
       {activeTab === 'calendar' && <CalendarPage />}
+      {activeTab === 'history' && <HistoryPage />}
       {activeTab === 'stats' && <StatsPage />}
       {activeTab === 'tags' && <TagsPage />}
       <SettingsDrawer />
