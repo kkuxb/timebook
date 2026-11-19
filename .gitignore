@@ -1,8 +1,15 @@
 node_modules/
 dist/
+workspace-data/
 .env
 .env.*
+!.env.example
 *.sqlite
 *.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+*.pem
+*.key
+*.log
 .wrangler/
 .DS_Store

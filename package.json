@@ -1,0 +1,25 @@
+{
+  "name": "timebook",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "corepack pnpm -r --workspace-concurrency=1 build",
+    "dev:api": "corepack pnpm --filter @timebook/api dev",
+    "dev:web": "corepack pnpm --filter @timebook/web dev",
+    "test": "vitest run",
+    "typecheck": "corepack pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "vitest": "^3.1.1"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "esbuild"
+    ]
+  },
+  "packageManager": "pnpm@10.0.0"
+}

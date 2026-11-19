@@ -1,0 +1,25 @@
+services:
+  timebook:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: timebook
+    restart: unless-stopped
+    ports:
+      - "3210:3210"
+    volumes:
+      - /volume1/docker/timebook/data:/data
+    environment:
+      PORT: "3210"
+      DATA_DIR: "/data"
+      TZ: "Asia/Shanghai"
+      COOKIE_SECURE: "auto"
+      # 请在启动前修改为你的个人访问口令与随机签名密钥
+      TIMEBOOK_PASSWORD: "请替换为你的访问口令"
+      TIMEBOOK_SECRET: "请替换为32位以上随机字符串"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3210/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
