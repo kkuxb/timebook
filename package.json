@@ -1,10 +1,13 @@
 {
   "name": "timebook",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "corepack pnpm -r --workspace-concurrency=1 build",
+    "desktop:dev": "corepack pnpm --filter @timebook/desktop dev",
+    "desktop:build": "corepack pnpm --filter @timebook/desktop tauri:build",
+    "desktop:test": "cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml",
     "dev:api": "corepack pnpm --filter @timebook/api dev",
     "dev:web": "corepack pnpm --filter @timebook/web dev",
     "test": "vitest run",

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { useAppStore, type NavTab } from '../store/useAppStore.js';
+import { DesktopTitlebar } from './DesktopTitlebar.js';
 import { SyncStatusPill } from './SyncStatusPill.js';
 
 const TABS: Array<{ id: NavTab; label: string }> = [
@@ -15,10 +16,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   const setSettingsOpen = useAppStore((s) => s.setSettingsOpen);
   const errorBanner = useAppStore((s) => s.errorBanner);
   const dismissErrorBanner = useAppStore((s) => s.dismissErrorBanner);
+  const isDesktop = useAppStore((s) => s.isDesktop);
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <header className="tb-header">
+      {isDesktop ? (
+        <DesktopTitlebar />
+      ) : (
+        <header className="tb-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div
             style={{
@@ -106,8 +111,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
         </div>
       </header>
+      )}
 
-      <main className="tb-main">
+      <main className="tb-main" style={isDesktop ? { paddingTop: 20 } : undefined}>
         {errorBanner && (
           <div
             role="alert"

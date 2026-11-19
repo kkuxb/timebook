@@ -1,14 +1,17 @@
 import { create } from 'zustand';
 import { ulid } from 'ulid';
-import type {
-  ColorKey,
-  ModuleEntity,
-  MutationItem,
-  SessionEntity,
-  SyncResponse,
-  TagEntity,
-  TodoCheckEntity,
-  TodoEntity,
+import {
+  dedupeDuplicateModules,
+  ensureSingleDefaultModulesSeed,
+  planLocalToRemoteMerge,
+  type ColorKey,
+  type ModuleEntity,
+  type MutationItem,
+  type SessionEntity,
+  type SyncResponse,
+  type TagEntity,
+  type TodoCheckEntity,
+  type TodoEntity,
 } from '@timebook/core';
 import {
   clearAllLocalData,
@@ -18,12 +21,52 @@ import {
   persistFullSync,
   type PendingMutationRecord,
 } from '../db/dexie.js';
+import {
+  DEFAULT_DESKTOP_CONFIG,
+  desktopBridge,
+  getDesktopWindowKind,
+  isDesktopEnvironment,
+  type DesktopConfig,
+  type LocalSnapshotFile,
+} from '../lib/desktopBridge.js';
+import { buildTagLookup, formatSessionDisplayTitle } from '../lib/labels.js';
 
 export type NavTab = 'today' | 'calendar' | 'stats' | 'tags';
 export type AuthState = 'checking' | 'unauthenticated' | 'authenticated';
 export type SyncStatus = 'ok' | 'saving' | 'offline' | 'db_error';
 
 const RETRY_DELAYS_MS = [2000, 5000, 15000, 30000];
+
+export function normalizeServerUrl(raw: string): string {
+  const trimmed = raw.trim().replace(/\/+$/, '');
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `http://${trimmed}`;
+}
+
+export function getApiUrl(path: string): string {
+  const state = useAppStore.getState();
+  if (state.isDesktop && state.desktopConfig?.connectionMode === 'nas') {
+    const base = normalizeServerUrl(state.desktopConfig.serverUrl);
+    if (base) return `${base}${path}`;
+  }
+  return path;
+}
+
+export function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const state = useAppStore.getState();
+  const headers = new Headers(init.headers);
+  if (state.isDesktop && state.desktopConfig?.connectionMode === 'nas') {
+    const token = state.desktopConfig.sessionToken;
+    if (token && !headers.has('Authorization')) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+  }
+  return fetch(getApiUrl(path), {
+    ...init,
+    headers,
+  });
+}
 
 interface AppState {
   activeTab: NavTab;
@@ -37,6 +80,10 @@ interface AppState {
   pendingCount: number;
   lastBackupAt: number | null;
   settingsOpen: boolean;
+
+  isDesktop: boolean;
+  desktopConfig: DesktopConfig | null;
+  desktopDataDir: string | null;
 
   modules: ModuleEntity[];
   tags: TagEntity[];
@@ -55,6 +102,16 @@ interface AppState {
   checkHealthAndSync: () => Promise<void>;
   retryNow: () => Promise<void>;
   refreshAfterServerAction: () => Promise<void>;
+
+  syncFromBridgeUpdate: () => Promise<void>;
+  applyConfigFromBridge: (config: DesktopConfig) => void;
+  updateDesktopConfig: (patch: Partial<DesktopConfig>) => Promise<{ ok: boolean; error?: string }>;
+  runDesktopBackup: () => Promise<{ ok: boolean; path?: string; error?: string }>;
+  connectToNas: (
+    serverUrl: string,
+    password: string,
+  ) => Promise<{ ok: boolean; error?: string; mergedCount?: number }>;
+  switchToLocalMode: () => Promise<void>;
 
   enqueueMutation: (item: { type: MutationItem['type']; payload: unknown }) => Promise<void>;
 
@@ -86,12 +143,111 @@ function clearRetryTimer() {
   }
 }
 
+function buildLocalSnapshotFile(state: Pick<AppState, 'modules' | 'tags' | 'sessions' | 'todos' | 'todoChecks'>): LocalSnapshotFile {
+  return {
+    version: 1,
+    savedAt: Date.now(),
+    modules: state.modules,
+    tags: state.tags,
+    sessions: state.sessions,
+    todos: state.todos,
+    todoChecks: state.todoChecks,
+  };
+}
+
+async function persistDesktopDiskAndTray(opts?: { broadcast?: boolean; wakeWidgetIfRunning?: boolean }): Promise<void> {
+  const state = useAppStore.getState();
+  if (!state.isDesktop) return;
+
+  const snap = buildLocalSnapshotFile(state);
+  try {
+    const res = await desktopBridge.saveSnapshot(snap);
+    if (state.desktopConfig && res.lastLocalBackupDate !== state.desktopConfig.lastLocalBackupDate) {
+      useAppStore.setState({
+        desktopConfig: {
+          ...state.desktopConfig,
+          lastLocalBackupDate: res.lastLocalBackupDate,
+        },
+      });
+    }
+  } catch {
+    // 忽略瞬时落盘报错
+  }
+
+  const lookup = buildTagLookup(state.modules, state.tags);
+  const runningSessions = state.sessions
+    .filter((s) => s.deleted_at === null && s.end_at === null)
+    .sort((a, b) => a.start_at - b.start_at);
+
+  const running = runningSessions.map((s) => ({
+    id: s.id,
+    title: formatSessionDisplayTitle(s, lookup),
+  }));
+
+  // 按最近使用时间提取最多 5 个未删常用事项，不足则从 activeTags 补齐
+  const recentTagIds: string[] = [];
+  const seen = new Set<string>();
+  const recentSessions = state.sessions
+    .filter((s) => s.deleted_at === null && s.tag_id !== null)
+    .sort((a, b) => b.start_at - a.start_at);
+
+  for (const s of recentSessions) {
+    if (!s.tag_id || seen.has(s.tag_id) || !lookup.tagById.has(s.tag_id)) continue;
+    seen.add(s.tag_id);
+    recentTagIds.push(s.tag_id);
+    if (recentTagIds.length >= 5) break;
+  }
+  if (recentTagIds.length < 5) {
+    for (const tag of lookup.activeTags) {
+      if (seen.has(tag.id)) continue;
+      seen.add(tag.id);
+      recentTagIds.push(tag.id);
+      if (recentTagIds.length >= 5) break;
+    }
+  }
+
+  const recentTags = recentTagIds.map((id) => {
+    const tag = lookup.tagById.get(id)!;
+    const mod = lookup.moduleById.get(tag.module_id);
+    return {
+      id,
+      label: mod ? `${mod.name} · ${tag.name}` : tag.name,
+    };
+  });
+
+  const cfg = useAppStore.getState().desktopConfig;
+  if (cfg) {
+    await desktopBridge
+      .syncTray({
+        modeLabel: cfg.connectionMode === 'nas' ? 'NAS 同步' : '单机模式',
+        running,
+        recentTags,
+        widgetVisible: cfg.widgetVisible,
+      })
+      .catch(() => undefined);
+
+    if (cfg.widgetVisible) {
+      if (cfg.autoHideWidgetWhenIdle) {
+        await desktopBridge.setWidgetVisibility(running.length > 0).catch(() => undefined);
+      } else if (opts?.wakeWidgetIfRunning && running.length > 0) {
+        await desktopBridge.setWidgetVisibility(true).catch(() => undefined);
+      }
+    }
+  }
+
+  if (opts?.broadcast) {
+    await desktopBridge.broadcastState(getDesktopWindowKind()).catch(() => undefined);
+  }
+}
+
 function applyOptimisticMutation(
   state: AppState,
   item: { type: MutationItem['type']; payload: unknown },
   now: number,
-): Partial<AppState> {
+): { patch: Partial<AppState>; dbTasks: Promise<unknown>[] } {
   const payload = item.payload as Record<string, unknown>;
+  const dbTasks: Promise<unknown>[] = [];
+
   switch (item.type) {
     case 'module.upsert': {
       const p = payload as unknown as ModuleEntity;
@@ -108,8 +264,8 @@ function applyOptimisticMutation(
       const modules = exists
         ? state.modules.map((m) => (m.id === nextItem.id ? nextItem : m))
         : [...state.modules, nextItem];
-      void localDb.modules.put(nextItem);
-      return { modules };
+      dbTasks.push(localDb.modules.put(nextItem));
+      return { patch: { modules }, dbTasks };
     }
     case 'module.delete': {
       const id = payload.id as string;
@@ -129,13 +285,11 @@ function applyOptimisticMutation(
             .map((t) => [t.name, t.id]),
         );
         const remapTagId = new Map<string, string>();
-        const deletedTagIds = new Set<string>();
         tags = tags.map((t) => {
           if (t.module_id !== id || t.deleted_at !== null) return t;
           const dupId = targetExistingByName.get(t.name);
           if (dupId) {
             remapTagId.set(t.id, dupId);
-            deletedTagIds.add(t.id);
             return { ...t, deleted_at: now, updated_at: now };
           }
           return { ...t, module_id: targetModuleId, updated_at: now };
@@ -171,11 +325,13 @@ function applyOptimisticMutation(
       const modules = state.modules.map((m) =>
         m.id === id ? { ...m, deleted_at: now, updated_at: now } : m,
       );
-      void localDb.modules.bulkPut(modules);
-      void localDb.tags.bulkPut(tags);
-      void localDb.sessions.bulkPut(sessions);
-      void localDb.todos.bulkPut(todos);
-      return { modules, tags, sessions, todos };
+      dbTasks.push(
+        localDb.modules.bulkPut(modules),
+        localDb.tags.bulkPut(tags),
+        localDb.sessions.bulkPut(sessions),
+        localDb.todos.bulkPut(todos),
+      );
+      return { patch: { modules, tags, sessions, todos }, dbTasks };
     }
     case 'tag.upsert': {
       const p = payload as unknown as TagEntity;
@@ -192,8 +348,8 @@ function applyOptimisticMutation(
       const tags = exists
         ? state.tags.map((t) => (t.id === nextTag.id ? nextTag : t))
         : [...state.tags, nextTag];
-      void localDb.tags.put(nextTag);
-      return { tags };
+      dbTasks.push(localDb.tags.put(nextTag));
+      return { patch: { tags }, dbTasks };
     }
     case 'tag.delete': {
       const id = payload.id as string;
@@ -229,10 +385,12 @@ function applyOptimisticMutation(
       const tags = state.tags.map((t) =>
         t.id === id ? { ...t, deleted_at: now, updated_at: now } : t,
       );
-      void localDb.tags.bulkPut(tags);
-      void localDb.sessions.bulkPut(sessions);
-      void localDb.todos.bulkPut(todos);
-      return { tags, sessions, todos };
+      dbTasks.push(
+        localDb.tags.bulkPut(tags),
+        localDb.sessions.bulkPut(sessions),
+        localDb.todos.bulkPut(todos),
+      );
+      return { patch: { tags, sessions, todos }, dbTasks };
     }
     case 'session.upsert': {
       const p = payload as unknown as SessionEntity;
@@ -253,14 +411,14 @@ function applyOptimisticMutation(
       const sessions = exists
         ? state.sessions.map((s) => (s.id === nextSess.id ? nextSess : s))
         : [...state.sessions, nextSess];
-      void localDb.sessions.put(nextSess);
-      return { sessions };
+      dbTasks.push(localDb.sessions.put(nextSess));
+      return { patch: { sessions }, dbTasks };
     }
     case 'session.cancel_running': {
       const id = payload.id as string;
       const sessions = state.sessions.filter((s) => s.id !== id);
-      void localDb.sessions.delete(id);
-      return { sessions };
+      dbTasks.push(localDb.sessions.delete(id));
+      return { patch: { sessions }, dbTasks };
     }
     case 'session.delete': {
       const id = payload.id as string;
@@ -268,8 +426,8 @@ function applyOptimisticMutation(
         s.id === id ? { ...s, deleted_at: now, updated_at: now } : s,
       );
       const target = sessions.find((s) => s.id === id);
-      if (target) void localDb.sessions.put(target);
-      return { sessions };
+      if (target) dbTasks.push(localDb.sessions.put(target));
+      return { patch: { sessions }, dbTasks };
     }
     case 'todo.upsert': {
       const p = payload as unknown as TodoEntity;
@@ -290,8 +448,8 @@ function applyOptimisticMutation(
       const todos = exists
         ? state.todos.map((td) => (td.id === nextTodo.id ? nextTodo : td))
         : [...state.todos, nextTodo];
-      void localDb.todos.put(nextTodo);
-      return { todos };
+      dbTasks.push(localDb.todos.put(nextTodo));
+      return { patch: { todos }, dbTasks };
     }
     case 'todo.delete': {
       const id = payload.id as string;
@@ -299,8 +457,8 @@ function applyOptimisticMutation(
         td.id === id ? { ...td, deleted_at: now, updated_at: now } : td,
       );
       const target = todos.find((td) => td.id === id);
-      if (target) void localDb.todos.put(target);
-      return { todos };
+      if (target) dbTasks.push(localDb.todos.put(target));
+      return { patch: { todos }, dbTasks };
     }
     case 'todo_check.toggle': {
       const todo_id = payload.todo_id as string;
@@ -321,14 +479,19 @@ function applyOptimisticMutation(
         idx >= 0
           ? state.todoChecks.map((c, i) => (i === idx ? check : c))
           : [...state.todoChecks, check];
-      void localDb.todoChecks.put(check);
-      return { todoChecks };
+      dbTasks.push(localDb.todoChecks.put(check));
+      return { patch: { todoChecks }, dbTasks };
     }
   }
-  return {};
+  return { patch: {}, dbTasks };
 }
 
 async function flushPendingQueue(): Promise<boolean> {
+  const st = useAppStore.getState();
+  if (st.isDesktop && st.desktopConfig?.connectionMode === 'local') {
+    return true;
+  }
+
   if (flushInFlight) {
     await flushInFlight;
     return (await localDb.pendingMutations.count()) === 0;
@@ -345,7 +508,7 @@ async function flushPendingQueue(): Promise<boolean> {
       useAppStore.setState({ syncStatus: 'saving', pendingCount: batch.length });
 
       try {
-        const res = await fetch('/api/mutations', {
+        const res = await apiFetch('/api/mutations', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -358,13 +521,19 @@ async function flushPendingQueue(): Promise<boolean> {
         });
 
         if (res.status === 401) {
-          useAppStore.setState({ authState: 'unauthenticated' });
+          if (!useAppStore.getState().isDesktop) {
+            useAppStore.setState({ authState: 'unauthenticated' });
+          } else {
+            useAppStore.setState({
+              syncStatus: 'offline',
+              lastError: 'NAS 会话已过期，请在设置中重新验证口令',
+            });
+          }
           succeeded = false;
           break;
         }
 
         if (res.status === 400 || res.status === 409) {
-          // 协议校验或命名冲突：丢弃问题批并立即全量拉回服务端权威状态，避免本地乐观状态失真
           const errJson = (await res.json().catch(() => ({}))) as { error?: string };
           const seqs = batch.map((b) => b.seq!).filter((x) => x !== undefined);
           await localDb.pendingMutations.bulkDelete(seqs);
@@ -422,6 +591,8 @@ async function flushPendingQueue(): Promise<boolean> {
 }
 
 function scheduleRetry() {
+  const st = useAppStore.getState();
+  if (st.isDesktop && st.desktopConfig?.connectionMode === 'local') return;
   clearRetryTimer();
   const delay = RETRY_DELAYS_MS[Math.min(retryAttempt, RETRY_DELAYS_MS.length - 1)];
   retryAttempt += 1;
@@ -433,9 +604,16 @@ function scheduleRetry() {
 async function pullSyncDelta(full = false): Promise<void> {
   const state = useAppStore.getState();
   const since = full ? 0 : state.syncCursor;
-  const res = await fetch(`/api/sync?since=${since}`);
+  const res = await apiFetch(`/api/sync?since=${since}`);
   if (res.status === 401) {
-    useAppStore.setState({ authState: 'unauthenticated' });
+    if (!state.isDesktop) {
+      useAppStore.setState({ authState: 'unauthenticated' });
+    } else {
+      useAppStore.setState({
+        syncStatus: 'offline',
+        lastError: 'NAS 会话已过期，请在设置中重新连接验证',
+      });
+    }
     return;
   }
   if (!res.ok) {
@@ -449,7 +627,7 @@ async function pullSyncDelta(full = false): Promise<void> {
   }
 
   const snap = await loadLocalSnapshot();
-  const savedAt = state.lastSavedAt ?? Date.now();
+  const savedAt = Date.now();
   await localDb.meta.put({ key: 'lastSavedAt', value: savedAt });
   useAppStore.setState({
     modules: snap.modules,
@@ -462,11 +640,15 @@ async function pullSyncDelta(full = false): Promise<void> {
     clockOffsetMs: data.serverTime - Date.now(),
     lastSavedAt: savedAt,
   });
+
+  if (state.isDesktop) {
+    await persistDesktopDiskAndTray({ broadcast: true });
+  }
 }
 
 async function fetchStatusMeta(): Promise<void> {
   try {
-    const res = await fetch('/api/status');
+    const res = await apiFetch('/api/status');
     if (res.ok) {
       const json = (await res.json()) as { backup?: { lastBackupAt?: number | null } };
       useAppStore.setState({ lastBackupAt: json.backup?.lastBackupAt ?? null });
@@ -489,6 +671,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   lastBackupAt: null,
   settingsOpen: false,
 
+  isDesktop: isDesktopEnvironment(),
+  desktopConfig: null,
+  desktopDataDir: null,
+
   modules: [],
   tags: [],
   sessions: [],
@@ -501,8 +687,132 @@ export const useAppStore = create<AppState>((set, get) => ({
   nowMs: () => Date.now() + get().clockOffsetMs,
 
   init: async () => {
-    const snap = await loadLocalSnapshot();
+    const isDesktop = isDesktopEnvironment();
+    let snap = await loadLocalSnapshot();
+
+    if (isDesktop) {
+      const windowKind = getDesktopWindowKind();
+      try {
+        const initRes = await desktopBridge.getInitState();
+        set({
+          isDesktop: true,
+          desktopConfig: initRes.config,
+          desktopDataDir: initRes.dataDir,
+        });
+
+        if (windowKind === 'main') {
+          // 仅主窗口在原子事务内负责恢复快照、清洗存量重复模块或生成默认四模块种子
+          await localDb.transaction(
+            'rw',
+            [localDb.modules, localDb.tags, localDb.sessions, localDb.todos, localDb.todoChecks, localDb.meta],
+            async () => {
+              const existingCount = await localDb.modules.count();
+              if (existingCount === 0) {
+                if (initRes.snapshot && initRes.snapshot.modules.length > 0) {
+                  const cleaned = dedupeDuplicateModules(
+                    initRes.snapshot.modules,
+                    initRes.snapshot.tags ?? [],
+                  );
+                  await localDb.modules.bulkPut(cleaned.modules);
+                  if (cleaned.tags.length) await localDb.tags.bulkPut(cleaned.tags);
+                  if (initRes.snapshot.sessions?.length) await localDb.sessions.bulkPut(initRes.snapshot.sessions);
+                  if (initRes.snapshot.todos?.length) await localDb.todos.bulkPut(initRes.snapshot.todos);
+                  if (initRes.snapshot.todoChecks?.length) await localDb.todoChecks.bulkPut(initRes.snapshot.todoChecks);
+                  await localDb.meta.put({ key: 'lastSavedAt', value: initRes.snapshot.savedAt || Date.now() });
+                } else {
+                  const seedMods = ensureSingleDefaultModulesSeed([], 'main', Date.now());
+                  if (seedMods) {
+                    await localDb.modules.bulkPut(seedMods);
+                    await localDb.meta.put({ key: 'lastSavedAt', value: Date.now() });
+                  }
+                }
+              } else {
+                const curMods = await localDb.modules.toArray();
+                const curTags = await localDb.tags.toArray();
+                const cleaned = dedupeDuplicateModules(curMods, curTags);
+                if (cleaned.deduped) {
+                  await localDb.modules.clear();
+                  if (cleaned.modules.length) await localDb.modules.bulkPut(cleaned.modules);
+                  if (cleaned.tags.length) await localDb.tags.bulkPut(cleaned.tags);
+                }
+              }
+            },
+          );
+          snap = await loadLocalSnapshot();
+
+          set({
+            modules: snap.modules,
+            tags: snap.tags,
+            sessions: snap.sessions,
+            todos: snap.todos,
+            todoChecks: snap.todoChecks,
+            syncCursor: snap.cursor,
+            pendingCount: snap.pending.length,
+            lastSavedAt: snap.lastSavedAt ?? Date.now(),
+            authState: 'authenticated',
+          });
+
+          await persistDesktopDiskAndTray({ broadcast: true });
+
+          if (initRes.config.connectionMode === 'nas' && initRes.config.serverUrl) {
+            await get().checkHealthAndSync();
+            void fetchStatusMeta();
+          } else {
+            set({ syncStatus: 'ok', pendingCount: 0, lastError: null });
+          }
+        } else {
+          // 轻量辅助窗口（widget / launcher）只读加载现状，严禁向空库生成种子或覆盖落盘
+          const fallbackSnap = snap.modules.length > 0 ? snap : initRes.snapshot;
+          const cleaned = dedupeDuplicateModules(
+            fallbackSnap?.modules ?? [],
+            fallbackSnap?.tags ?? [],
+          );
+          set({
+            modules: cleaned.modules,
+            tags: cleaned.tags,
+            sessions: fallbackSnap?.sessions ?? [],
+            todos: fallbackSnap?.todos ?? [],
+            todoChecks: fallbackSnap?.todoChecks ?? [],
+            syncCursor: snap.cursor,
+            pendingCount: snap.pending.length,
+            lastSavedAt: snap.lastSavedAt ?? initRes.snapshot?.savedAt ?? Date.now(),
+            authState: 'authenticated',
+            syncStatus: 'ok',
+          });
+        }
+      } catch (err) {
+        // 任何桌面初始化异常都必须兜底进入主页，绝不允许永久停留在 checking 加载页
+        const fallbackMods =
+          snap.modules.length > 0
+            ? dedupeDuplicateModules(snap.modules, snap.tags).modules
+            : (ensureSingleDefaultModulesSeed([], 'main', Date.now()) ?? []);
+        const fallbackTags =
+          snap.modules.length > 0
+            ? dedupeDuplicateModules(snap.modules, snap.tags).tags
+            : snap.tags;
+        const errMsg = err instanceof Error ? err.message : String(err);
+        set({
+          isDesktop: true,
+          desktopConfig: get().desktopConfig ?? { ...DEFAULT_DESKTOP_CONFIG },
+          modules: fallbackMods,
+          tags: fallbackTags,
+          sessions: snap.sessions,
+          todos: snap.todos,
+          todoChecks: snap.todoChecks,
+          syncCursor: snap.cursor,
+          pendingCount: snap.pending.length,
+          lastSavedAt: snap.lastSavedAt ?? Date.now(),
+          authState: 'authenticated',
+          syncStatus: 'ok',
+          errorBanner: windowKind === 'main' ? `桌面初始化已自动切换兜底模式：${errMsg}` : null,
+        });
+      }
+      return;
+    }
+
+    // 普通网页版与 PWA 流程（100% 保持原样）
     set({
+      isDesktop: false,
       modules: snap.modules,
       tags: snap.tags,
       sessions: snap.sessions,
@@ -525,7 +835,6 @@ export const useAppStore = create<AppState>((set, get) => ({
         void fetchStatusMeta();
         return;
       }
-      // 服务端 5xx 时若本地已有数据先进入界面并标为连接断开，避免锁死
       if (snap.modules.length > 0) {
         set({ authState: 'authenticated', syncStatus: 'offline', lastError: `HTTP ${meRes.status}` });
         scheduleRetry();
@@ -571,7 +880,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   logout: async () => {
     clearRetryTimer();
     try {
-      await fetch('/api/logout', { method: 'POST' });
+      await apiFetch('/api/logout', { method: 'POST' });
     } catch {
       // 忽略网络错误
     }
@@ -593,9 +902,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   checkHealthAndSync: async () => {
     if (get().authState !== 'authenticated') return;
+    if (get().isDesktop && get().desktopConfig?.connectionMode === 'local') {
+      set({ syncStatus: 'ok', pendingCount: 0, lastError: null });
+      return;
+    }
 
     try {
-      const hRes = await fetch('/api/health');
+      const hRes = await apiFetch('/api/health');
       const hBody = (await hRes.json().catch(() => ({}))) as {
         ok?: boolean;
         db?: boolean;
@@ -623,7 +936,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       const flushed = await flushPendingQueue();
       if (!flushed) return;
 
-      // 如果本地尚无游标（首次登录），执行全量拉取，否则增量拉取
       await pullSyncDelta(get().syncCursor === 0);
 
       if ((await localDb.pendingMutations.count()) === 0) {
@@ -655,20 +967,243 @@ export const useAppStore = create<AppState>((set, get) => ({
     void fetchStatusMeta();
   },
 
+  syncFromBridgeUpdate: async () => {
+    if (!get().isDesktop) return;
+    const snap = await loadLocalSnapshot();
+    if (snap.modules.length === 0) {
+      const initRes = await desktopBridge.getInitState();
+      if (initRes.snapshot && initRes.snapshot.modules.length > 0) {
+        set({
+          modules: initRes.snapshot.modules,
+          tags: initRes.snapshot.tags ?? [],
+          sessions: initRes.snapshot.sessions ?? [],
+          todos: initRes.snapshot.todos ?? [],
+          todoChecks: initRes.snapshot.todoChecks ?? [],
+          lastSavedAt: initRes.snapshot.savedAt ?? get().lastSavedAt,
+        });
+        return;
+      }
+    }
+    set({
+      modules: snap.modules,
+      tags: snap.tags,
+      sessions: snap.sessions,
+      todos: snap.todos,
+      todoChecks: snap.todoChecks,
+      syncCursor: snap.cursor,
+      pendingCount: snap.pending.length,
+      lastSavedAt: snap.lastSavedAt ?? get().lastSavedAt,
+    });
+  },
+
+  applyConfigFromBridge: (config: DesktopConfig) => {
+    set({ desktopConfig: config });
+  },
+
+  updateDesktopConfig: async (patch) => {
+    const current = get().desktopConfig;
+    if (!current) return { ok: false, error: '当前非桌面端环境' };
+    const nextCfg: DesktopConfig = { ...current, ...patch };
+    try {
+      const saved = await desktopBridge.saveConfig(nextCfg);
+      set({ desktopConfig: saved });
+      await persistDesktopDiskAndTray({ broadcast: false });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  },
+
+  runDesktopBackup: async () => {
+    try {
+      const res = await desktopBridge.runLocalBackup();
+      const cfg = get().desktopConfig;
+      if (cfg) {
+        set({ desktopConfig: { ...cfg, lastLocalBackupDate: res.date } });
+      }
+      return { ok: true, path: res.path };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  },
+
+  connectToNas: async (rawUrl: string, password: string) => {
+    const serverUrl = normalizeServerUrl(rawUrl);
+    if (!serverUrl) {
+      return { ok: false, error: '请先填写 NAS 服务地址' };
+    }
+    if (!password) {
+      return { ok: false, error: '请填写访问口令' };
+    }
+
+    try {
+      const loginRes = await fetch(`${serverUrl}/api/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      const loginJson = (await loginRes.json().catch(() => ({}))) as {
+        ok?: boolean;
+        token?: string;
+        error?: string;
+      };
+      if (!loginRes.ok || !loginJson.token) {
+        return { ok: false, error: loginJson.error || `登录失败 (${loginRes.status})` };
+      }
+      const token = loginJson.token;
+
+      // 1. 拉取远端现有全量数据
+      const sync0Res = await fetch(`${serverUrl}/api/sync?since=0`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!sync0Res.ok) {
+        return { ok: false, error: `拉取远端数据失败 (${sync0Res.status})` };
+      }
+      const remoteData = (await sync0Res.json()) as SyncResponse;
+
+      // 2. 规划单机数据无损合并与默认四模块去重
+      const st = get();
+      const plan = planLocalToRemoteMerge(
+        {
+          modules: st.modules,
+          tags: st.tags,
+          sessions: st.sessions,
+          todos: st.todos,
+          todoChecks: st.todoChecks,
+        },
+        {
+          modules: remoteData.modules,
+          tags: remoteData.tags,
+          sessions: remoteData.sessions,
+          todos: remoteData.todos,
+          todoChecks: remoteData.todoChecks,
+        },
+      );
+
+      // 3. 分批幂等提交合并项至 NAS
+      const chunkSize = 200;
+      for (let i = 0; i < plan.mutationsToPush.length; i += chunkSize) {
+        const chunk = plan.mutationsToPush.slice(i, i + chunkSize);
+        const mutRes = await fetch(`${serverUrl}/api/mutations`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ mutations: chunk }),
+        });
+        if (!mutRes.ok) {
+          const errJson = (await mutRes.json().catch(() => ({}))) as { error?: string };
+          return { ok: false, error: errJson.error || `合并写入服务端失败 (${mutRes.status})` };
+        }
+      }
+
+      // 4. 清空旧队列，重新全量拉取服务端权威状态落入 Dexie 与本地 JSON
+      await localDb.pendingMutations.clear();
+      const syncFinalRes = await fetch(`${serverUrl}/api/sync?since=0`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!syncFinalRes.ok) {
+        return { ok: false, error: `同步最终状态失败 (${syncFinalRes.status})` };
+      }
+      const finalData = (await syncFinalRes.json()) as SyncResponse & { runningSessionIds?: string[] };
+      await persistFullSync(finalData);
+      const savedAt = Date.now();
+      await localDb.meta.put({ key: 'lastSavedAt', value: savedAt });
+
+      const currentCfg = get().desktopConfig;
+      if (currentCfg) {
+        const savedCfg = await desktopBridge.saveConfig({
+          ...currentCfg,
+          connectionMode: 'nas',
+          serverUrl,
+          sessionToken: token,
+        });
+        set({ desktopConfig: savedCfg });
+      }
+
+      const snap = await loadLocalSnapshot();
+      set({
+        modules: snap.modules,
+        tags: snap.tags,
+        sessions: snap.sessions,
+        todos: snap.todos,
+        todoChecks: snap.todoChecks,
+        syncCursor: snap.cursor,
+        pendingCount: 0,
+        clockOffsetMs: finalData.serverTime - Date.now(),
+        lastSavedAt: savedAt,
+        syncStatus: 'ok',
+        lastError: null,
+      });
+
+      await persistDesktopDiskAndTray({ broadcast: true });
+      void fetchStatusMeta();
+      return { ok: true, mergedCount: plan.mutationsToPush.length };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : '连接 NAS 失败，请确认地址和网络连通性',
+      };
+    }
+  },
+
+  switchToLocalMode: async () => {
+    clearRetryTimer();
+    const cfg = get().desktopConfig;
+    if (!cfg) return;
+    await localDb.pendingMutations.clear();
+    const savedCfg = await desktopBridge.saveConfig({
+      ...cfg,
+      connectionMode: 'local',
+    });
+    set({
+      desktopConfig: savedCfg,
+      syncStatus: 'ok',
+      pendingCount: 0,
+      lastError: null,
+    });
+    await persistDesktopDiskAndTray({ broadcast: true });
+  },
+
   enqueueMutation: async (item) => {
     const mutation_id = ulid();
     const now = get().nowMs();
-    const patch = applyOptimisticMutation(get(), item, now);
+    const { patch, dbTasks } = applyOptimisticMutation(get(), item, now);
+    const isLocalDesktop =
+      get().isDesktop && get().desktopConfig?.connectionMode === 'local';
 
-    await localDb.pendingMutations.add({
-      mutation_id,
-      type: item.type,
-      payload: item.payload,
-      createdAt: now,
-    });
+    if (isLocalDesktop) {
+      await Promise.all(dbTasks);
+      const savedAt = Date.now();
+      await localDb.meta.put({ key: 'lastSavedAt', value: savedAt });
+      set({ ...patch, pendingCount: 0, syncStatus: 'ok', lastSavedAt: savedAt, lastError: null });
+      await persistDesktopDiskAndTray({
+        broadcast: true,
+        wakeWidgetIfRunning: item.type === 'session.upsert',
+      });
+      return;
+    }
+
+    await Promise.all([
+      ...dbTasks,
+      localDb.pendingMutations.add({
+        mutation_id,
+        type: item.type,
+        payload: item.payload,
+        createdAt: now,
+      }),
+    ]);
 
     const pendingCount = await localDb.pendingMutations.count();
     set({ ...patch, pendingCount, syncStatus: 'saving' });
+
+    if (get().isDesktop) {
+      await persistDesktopDiskAndTray({
+        broadcast: true,
+        wakeWidgetIfRunning: item.type === 'session.upsert',
+      });
+    }
 
     const ok = await flushPendingQueue();
     if (ok && get().authState === 'authenticated') {

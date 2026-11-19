@@ -1,0 +1,78 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "时间簿",
+  "mainBinaryName": "timebook-desktop",
+  "version": "0.1.0",
+  "identifier": "com.timebook.desktop",
+  "build": {
+    "beforeDevCommand": "corepack pnpm --filter @timebook/web dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "corepack pnpm --filter @timebook/web build",
+    "frontendDist": "../../web/dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "时间簿",
+        "width": 1220,
+        "height": 820,
+        "minWidth": 900,
+        "minHeight": 640,
+        "center": true,
+        "decorations": false,
+        "visible": false
+      },
+      {
+        "label": "widget",
+        "title": "时间簿 · 灵动胶囊",
+        "url": "index.html?window=widget",
+        "width": 284,
+        "height": 52,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "shadow": false,
+        "focus": false,
+        "visible": false
+      },
+      {
+        "label": "launcher",
+        "title": "时间簿 · 极速开始",
+        "url": "index.html?window=launcher",
+        "width": 460,
+        "height": 268,
+        "center": true,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "shadow": false,
+        "visible": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "languages": ["SimpChinese"],
+        "displayLanguageSelector": false
+      }
+    }
+  }
+}

@@ -118,7 +118,7 @@ export class IpRateLimiter {
   }
 }
 
-export function issueSessionCookie(c: Context, config: AuthConfig): void {
+export function issueSessionCookie(c: Context, config: AuthConfig): string {
   const now = Date.now();
   const expiresAt = now + SESSION_MAX_AGE_SEC * 1000;
   const token = signToken(now, expiresAt, config.secret);
@@ -129,6 +129,16 @@ export function issueSessionCookie(c: Context, config: AuthConfig): void {
     path: '/',
     maxAge: SESSION_MAX_AGE_SEC,
   });
+  return token;
+}
+
+export function extractSessionToken(c: Context): string | undefined {
+  const cookieToken = getCookie(c, SESSION_COOKIE_NAME);
+  if (cookieToken) return cookieToken;
+  const authHeader = c.req.header('authorization');
+  if (!authHeader) return undefined;
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  return match ? match[1].trim() : undefined;
 }
 
 export function clearSessionCookie(c: Context, config: AuthConfig): void {
@@ -142,7 +152,7 @@ export function clearSessionCookie(c: Context, config: AuthConfig): void {
 
 export function requireAuthMiddleware(config: AuthConfig): MiddlewareHandler {
   return async (c, next) => {
-    const token = getCookie(c, SESSION_COOKIE_NAME);
+    const token = extractSessionToken(c);
     if (!verifySessionToken(token, config.secret)) {
       return c.json({ ok: false, error: '未登录或会话已过期' }, 401);
     }

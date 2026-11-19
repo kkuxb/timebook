@@ -5,7 +5,7 @@ import { useAppStore, type SyncStatus } from '../store/useAppStore.js';
 const STATUS_STYLE: Record<
   SyncStatus,
   {
-    label: (pending: number) => string;
+    label: (pending: number, isDesktop: boolean, mode: 'local' | 'nas') => string;
     dot: string;
     bg: string;
     fg: string;
@@ -14,7 +14,12 @@ const STATUS_STYLE: Record<
   }
 > = {
   ok: {
-    label: () => '数据已同步',
+    label: (_n, isDesktop, mode) =>
+      isDesktop
+        ? mode === 'local'
+          ? '本机已保存 · 单机模式'
+          : '数据已同步 · 远程服务'
+        : '数据已同步',
     dot: '#14B8A6',
     bg: 'transparent',
     fg: '#4B5263',
@@ -53,6 +58,9 @@ export function SyncStatusPill() {
   const lastSavedAt = useAppStore((s) => s.lastSavedAt);
   const lastError = useAppStore((s) => s.lastError);
   const retryNow = useAppStore((s) => s.retryNow);
+  const isDesktop = useAppStore((s) => s.isDesktop);
+  const desktopConfig = useAppStore((s) => s.desktopConfig);
+  const setSettingsOpen = useAppStore((s) => s.setSettingsOpen);
 
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -68,8 +76,9 @@ export function SyncStatusPill() {
     return () => window.removeEventListener('mousedown', onDown);
   }, [open]);
 
+  const mode = desktopConfig?.connectionMode ?? 'local';
   const st = STATUS_STYLE[syncStatus];
-  const label = st.label(pendingCount);
+  const label = st.label(pendingCount, isDesktop, mode);
   const savedText = lastSavedAt ? formatShanghaiTime(lastSavedAt) : '尚未同步';
 
   return (
@@ -82,10 +91,10 @@ export function SyncStatusPill() {
         aria-expanded={open}
         className="btn"
         style={{
-          height: 34,
+          height: 32,
           padding: '0 12px',
           borderRadius: 999,
-          fontSize: 13,
+          fontSize: 12,
           fontWeight: 700,
           background: st.bg,
           color: st.fg,
@@ -114,8 +123,8 @@ export function SyncStatusPill() {
           style={{
             position: 'absolute',
             right: 0,
-            top: 42,
-            width: 280,
+            top: 40,
+            width: 288,
             padding: 16,
             zIndex: 60,
             display: 'flex',
@@ -126,7 +135,7 @@ export function SyncStatusPill() {
           <div style={{ fontSize: 14, fontWeight: 800 }}>{label}</div>
           <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', lineHeight: 1.5 }}>
             <div>上次保存时间：{savedText}</div>
-            <div>待发送改动：{pendingCount} 条</div>
+            {(!isDesktop || mode === 'nas') && <div>待发送改动：{pendingCount} 条</div>}
             {syncStatus === 'db_error' && (
               <div style={{ color: '#C8203E', marginTop: 4 }}>
                 数据可能没有保存：{lastError || '数据库读写异常'}
@@ -135,20 +144,39 @@ export function SyncStatusPill() {
             {syncStatus === 'offline' && lastError && (
               <div style={{ color: '#9A3A0A', marginTop: 4 }}>原因：{lastError}</div>
             )}
-            {syncStatus === 'ok' && (
+            {syncStatus === 'ok' && isDesktop && mode === 'local' && (
+              <div style={{ marginTop: 4 }}>
+                数据已实时写入本机文件并每日自动备份，随时可在设置中连接 NAS 合并同步。
+              </div>
+            )}
+            {syncStatus === 'ok' && (!isDesktop || mode === 'nas') && (
               <div style={{ marginTop: 4 }}>本地缓存与服务端 SQLite 已对齐。</div>
             )}
           </div>
-          <button
-            type="button"
-            className="btn soft"
-            onClick={() => {
-              void retryNow();
-            }}
-            style={{ height: 36, borderRadius: 10, fontSize: 13 }}
-          >
-            立即重试
-          </button>
+          {isDesktop && mode === 'local' ? (
+            <button
+              type="button"
+              className="btn soft"
+              onClick={() => {
+                setOpen(false);
+                setSettingsOpen(true);
+              }}
+              style={{ height: 36, borderRadius: 10, fontSize: 13 }}
+            >
+              前往设置连接 NAS 或备份
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn soft"
+              onClick={() => {
+                void retryNow();
+              }}
+              style={{ height: 36, borderRadius: 10, fontSize: 13 }}
+            >
+              立即重试
+            </button>
+          )}
         </div>
       )}
     </div>

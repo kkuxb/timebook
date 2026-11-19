@@ -350,4 +350,85 @@ describe('@timebook/api integration', () => {
       ctx.close();
     }
   });
+
+  it('supports Bearer token auth and controlled CORS headers for desktop clients', async () => {
+    const { app, ctx } = createTempApp('desktop-pw');
+    try {
+      const preflight = await app.request('/api/sync?since=0', {
+        method: 'OPTIONS',
+        headers: {
+          Origin: 'http://tauri.localhost',
+          'Access-Control-Request-Method': 'GET',
+        },
+      });
+      expect(preflight.status).toBe(204);
+      expect(preflight.headers.get('access-control-allow-origin')).toBe('http://tauri.localhost');
+      expect(preflight.headers.get('access-control-allow-headers')).toContain('Authorization');
+
+      const loginRes = await app.request('/api/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: 'http://tauri.localhost',
+        },
+        body: JSON.stringify({ password: 'desktop-pw' }),
+      });
+      expect(loginRes.status).toBe(200);
+      expect(loginRes.headers.get('access-control-allow-origin')).toBe('http://tauri.localhost');
+      const loginJson = (await loginRes.json()) as { ok: boolean; token?: string };
+      expect(loginJson.ok).toBe(true);
+      expect(typeof loginJson.token).toBe('string');
+      expect(loginJson.token!.length).toBeGreaterThan(20);
+
+      // 无 Cookie 仅凭 Bearer Token 访问
+      const syncRes = await app.request('/api/sync?since=0', {
+        headers: {
+          Origin: 'http://tauri.localhost',
+          Authorization: `Bearer ${loginJson.token}`,
+        },
+      });
+      expect(syncRes.status).toBe(200);
+      expect(syncRes.headers.get('access-control-allow-origin')).toBe('http://tauri.localhost');
+      const syncJson = (await syncRes.json()) as { modules: Array<{ id: string; name: string }> };
+      expect(syncJson.modules).toHaveLength(4);
+
+      const mutRes = await app.request('/api/mutations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: 'http://tauri.localhost',
+          Authorization: `Bearer ${loginJson.token}`,
+        },
+        body: JSON.stringify({
+          mutations: [
+            {
+              mutation_id: 'mut-bearer-1',
+              type: 'tag.upsert',
+              payload: {
+                id: 'tag-bearer-1',
+                module_id: syncJson.modules[0].id,
+                name: '桌面同步事项',
+                sort: 0,
+              },
+            },
+          ],
+        }),
+      });
+      expect(mutRes.status).toBe(200);
+      const mutJson = (await mutRes.json()) as { appliedCount: number };
+      expect(mutJson.appliedCount).toBe(1);
+
+      // 伪造或错误格式的 Bearer 必须返回 401
+      const badBearer = await app.request('/api/sync?since=0', {
+        headers: {
+          Origin: 'http://tauri.localhost',
+          Authorization: 'Bearer invalid.token.value',
+        },
+      });
+      expect(badBearer.status).toBe(401);
+      expect(badBearer.headers.get('access-control-allow-origin')).toBe('http://tauri.localhost');
+    } finally {
+      ctx.close();
+    }
+  });
 });

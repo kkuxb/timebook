@@ -334,7 +334,7 @@ export function exportDatabaseJson(ctx: DbContext) {
 
   return {
     exportedAt: Date.now(),
-    version: '1.0.0',
+    version: '0.1.0',
     modules,
     tags,
     sessions,

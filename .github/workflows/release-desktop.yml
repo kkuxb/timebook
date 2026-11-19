@@ -1,0 +1,48 @@
+name: 构建时间簿 Windows 桌面版
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build-windows-desktop:
+    runs-on: windows-latest
+    steps:
+      - name: 检出仓库代码
+        uses: actions/checkout@v4
+
+      - name: 启用 pnpm 与配置 Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 启用 Corepack
+        run: corepack enable
+
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: 安装工作区依赖
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: 构建核心与前端产物并运行全仓单测
+        run: |
+          corepack pnpm build
+          corepack pnpm test
+          cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
+
+      - name: 编译生成 Windows 安装包
+        run: corepack pnpm desktop:build
+
+      - name: 上传安装包与便携程序产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: timebook-windows-desktop
+          path: |
+            apps/desktop/src-tauri/target/release/timebook-desktop.exe
+            apps/desktop/src-tauri/target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error

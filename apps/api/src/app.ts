@@ -59,6 +59,22 @@ export function createApp(options: CreateAppOptions = {}) {
 
   const app = new Hono();
 
+  // 受控 CORS 支持（供 Tauri 桌面客户端跨域连接家庭 NAS）
+  app.use('/api/*', async (c, next) => {
+    const origin = c.req.header('origin');
+    if (origin) {
+      c.header('Access-Control-Allow-Origin', origin);
+      c.header('Access-Control-Allow-Credentials', 'true');
+      c.header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+      c.header('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+      c.header('Vary', 'Origin');
+    }
+    if (c.req.method === 'OPTIONS') {
+      return c.body(null, 204);
+    }
+    await next();
+  });
+
   // 免登录健康检查：真实写入并回读 SQLite heartbeat 表
   app.get('/api/health', (c) => {
     const serverTime = Date.now();
@@ -120,8 +136,8 @@ export function createApp(options: CreateAppOptions = {}) {
     }
 
     limiter.reset(ip);
-    issueSessionCookie(c, authConfig);
-    return c.json({ ok: true, serverTime: Date.now() });
+    const token = issueSessionCookie(c, authConfig);
+    return c.json({ ok: true, serverTime: Date.now(), token });
   });
 
   app.post('/api/logout', (c) => {

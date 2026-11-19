@@ -20,6 +20,7 @@ EXCLUDE_DIRS = {
     ".git",
     "node_modules",
     "dist",
+    "target",
     "workspace-data",
     "__pycache__",
     ".wrangler",
@@ -98,6 +99,8 @@ def security_scan(items: list[tuple[str, Path]]) -> list[str]:
         ".html",
         ".css",
         ".py",
+        ".rs",
+        ".toml",
         ".example",
     }
     for rel, fpath in items:
