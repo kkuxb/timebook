@@ -37,7 +37,7 @@ export function TagDeleteModal({ target, onClose }: TagDeleteModalProps) {
 
   const modTagIds = isTag
     ? new Set([target.id])
-    : new Set(lookup.activeTags.filter((t) => t.module_id === target.id).map((t) => t.id));
+    : new Set(lookup.allTags.filter((t) => t.module_id === target.id).map((t) => t.id));
 
   const affectedDoneSessions = sessions.filter(
     (s) => s.deleted_at === null && s.end_at !== null && s.tag_id && modTagIds.has(s.tag_id),
@@ -51,7 +51,7 @@ export function TagDeleteModal({ target, onClose }: TagDeleteModalProps) {
     : modTagIds.size > 0 || affectedDoneSessions.length > 0 || affectedTodos.length > 0;
 
   const candidates = isTag
-    ? lookup.activeTags
+    ? lookup.enabledTags
         .filter((t) => t.id !== target.id)
         .map((t) => {
           const m = lookup.moduleById.get(t.module_id)!;

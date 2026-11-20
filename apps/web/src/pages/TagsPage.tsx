@@ -3,6 +3,7 @@ import {
   COLOR_KEYS,
   formatDurationLarge,
   getPaletteEntry,
+  isTagDisabled,
   MODULE_PALETTE,
   type ColorKey,
   type ModuleEntity,
@@ -30,6 +31,7 @@ interface TagModalState {
   originalModuleId: string;
   sort: number;
   createdAt?: number;
+  disabledAt?: number | null;
 }
 
 export function TagsPage() {
@@ -39,9 +41,11 @@ export function TagsPage() {
   const nowMs = useAppStore((s) => s.nowMs);
   const upsertModule = useAppStore((s) => s.upsertModule);
   const upsertTag = useAppStore((s) => s.upsertTag);
+  const setTagDisabled = useAppStore((s) => s.setTagDisabled);
 
   const [modModal, setModModal] = useState<ModuleModalState | null>(null);
   const [tagModal, setTagModal] = useState<TagModalState | null>(null);
+  const [disabledModalOpen, setDisabledModalOpen] = useState(false);
   const [delTarget, setDelTarget] = useState<DeleteTarget>(null);
 
   const lookup = buildTagLookup(modules, tags);
@@ -84,15 +88,17 @@ export function TagsPage() {
     setModModal(null);
   };
 
-  const tagDup =
-    tagModal &&
-    tagModal.name.trim().length > 0 &&
-    lookup.activeTags.some(
-      (t) =>
-        t.module_id === tagModal.moduleId &&
-        t.name === tagModal.name.trim() &&
-        t.id !== tagModal.id,
-    );
+  const dupTag =
+    tagModal && tagModal.name.trim().length > 0
+      ? lookup.allTags.find(
+          (t) =>
+            t.module_id === tagModal.moduleId &&
+            t.name === tagModal.name.trim() &&
+            t.id !== tagModal.id,
+        )
+      : undefined;
+  const tagDup = Boolean(dupTag);
+  const tagDupDisabled = Boolean(dupTag && isTagDisabled(dupTag));
 
   const handleSaveTag = async () => {
     if (!tagModal || tagDup) return;
@@ -107,6 +113,7 @@ export function TagsPage() {
       created_at: tagModal.createdAt ?? ts,
       updated_at: ts,
       deleted_at: null,
+      disabled_at: tagModal.disabledAt ?? null,
     });
     setTagModal(null);
   };
@@ -133,17 +140,36 @@ export function TagsPage() {
             模块（一级）下面挂具体事项（二级）。事项的颜色跟随所属模块。
           </div>
         </div>
-        <button
-          type="button"
-          onClick={openNewModule}
-          className="btn primary"
-          style={{ height: 44, padding: '0 18px', borderRadius: 12, fontSize: 14 }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" aria-hidden="true">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-          新建模块
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            type="button"
+            onClick={() => setDisabledModalOpen(true)}
+            data-testid="open-disabled-tags-btn"
+            className="btn ghost"
+            style={{ height: 44, padding: '0 16px', borderRadius: 12, fontSize: 14 }}
+          >
+            已停用
+            {lookup.disabledTags.length > 0 && (
+              <span
+                className="count tnum"
+                style={{ height: 22, padding: '0 8px', fontSize: 12 }}
+              >
+                {lookup.disabledTags.length}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={openNewModule}
+            className="btn primary"
+            style={{ height: 44, padding: '0 18px', borderRadius: 12, fontSize: 14 }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" aria-hidden="true">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            新建模块
+          </button>
+        </div>
       </section>
 
       <div
@@ -156,7 +182,7 @@ export function TagsPage() {
       >
         {lookup.activeModules.map((mod: ModuleEntity) => {
           const pal = getPaletteEntry(mod.color_key);
-          const mTags = lookup.activeTags
+          const mTags = lookup.enabledTags
             .filter((t) => t.module_id === mod.id)
             .sort((a, b) => (tagMs.get(b.id) ?? 0) - (tagMs.get(a.id) ?? 0));
           const totalMs = mTags.reduce((acc, t) => acc + (tagMs.get(t.id) ?? 0), 0);
@@ -296,6 +322,19 @@ export function TagsPage() {
 
                         <button
                           type="button"
+                          onClick={() => void setTagDisabled(t.id, true)}
+                          className="btn tiny act"
+                          data-testid={`disable-tag-${t.id}`}
+                          aria-label={`停用事项 ${t.name}`}
+                          title="停用（不影响历史记录与统计）"
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <circle cx="12" cy="12" r="9" />
+                            <path d="M5.6 5.6l12.8 12.8" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
                           onClick={() =>
                             setTagModal({
                               mode: 'edit',
@@ -305,6 +344,7 @@ export function TagsPage() {
                               originalModuleId: t.module_id,
                               sort: t.sort,
                               createdAt: t.created_at,
+                              disabledAt: t.disabled_at ?? null,
                             })
                           }
                           className="btn tiny act"
@@ -355,8 +395,132 @@ export function TagsPage() {
       </div>
 
       <div style={{ fontSize: 12, fontWeight: 600, color: '#9CA3AF' }}>
-        鼠标移到事项或模块标题上，会出现修改和删除按钮。百分比是该事项在模块里的占比。
+        鼠标移到事项或模块标题上，会出现停用、修改和删除按钮。百分比是该事项在模块启用事项里的占比。
       </div>
+
+      {/* 已停用事项弹窗 */}
+      {disabledModalOpen && (
+        <div className="modal-backdrop" onClick={() => setDisabledModalOpen(false)}>
+          <div
+            role="dialog"
+            aria-label="已停用事项"
+            data-testid="disabled-tags-modal"
+            className="card modal-panel"
+            style={{ maxWidth: 560, display: 'flex', flexDirection: 'column', gap: 18 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 24, fontWeight: 800 }}>已停用事项</h2>
+                <div style={{ marginTop: 6, fontSize: 13, fontWeight: 600, color: '#6B7280', lineHeight: 1.5 }}>
+                  这些事项已从标签页、开始专注和新建选择中隐藏；它们关联的历史记录与统计数据仍完整保留。
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDisabledModalOpen(false)}
+                className="btn ghost icon"
+                aria-label="关闭已停用事项"
+                style={{ width: 34, height: 34, borderRadius: 10, flex: 'none' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {lookup.disabledTags.length === 0 ? (
+              <div
+                style={{
+                  border: '1.5px dashed #CDD1DC',
+                  borderRadius: 16,
+                  padding: '28px 16px',
+                  textAlign: 'center',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  color: '#9CA3AF',
+                }}
+              >
+                暂无已停用事项。把不再常用的二级事项停用后，可以在这里随时恢复启用。
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {lookup.activeModules.map((mod) => {
+                  const modDisabledTags = lookup.disabledTags.filter((t) => t.module_id === mod.id);
+                  if (modDisabledTags.length === 0) return null;
+                  const pal = getPaletteEntry(mod.color_key);
+                  return (
+                    <div key={mod.id} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ width: 9, height: 9, borderRadius: 3, background: pal.color }} />
+                        <span style={{ fontSize: 13, fontWeight: 800, color: '#4B5263' }}>{mod.name}</span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {modDisabledTags.map((t) => {
+                          const ms = tagMs.get(t.id) ?? 0;
+                          const cnt = tagCnt.get(t.id) ?? 0;
+                          return (
+                            <div
+                              key={t.id}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: 10,
+                                padding: '10px 12px',
+                                borderRadius: 12,
+                                background: '#F5F6FA',
+                              }}
+                            >
+                              <div style={{ minWidth: 0 }}>
+                                <div
+                                  style={{
+                                    fontSize: 14,
+                                    fontWeight: 800,
+                                    color: '#111827',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap',
+                                  }}
+                                >
+                                  {t.name}
+                                </div>
+                                <div className="tnum" style={{ marginTop: 2, fontSize: 12, fontWeight: 600, color: '#6B7280' }}>
+                                  历史累计 {formatDurationLarge(ms)} · {cnt.toLocaleString('en-US')} 次记录
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 'none' }}>
+                                <button
+                                  type="button"
+                                  data-testid={`enable-tag-${t.id}`}
+                                  onClick={() => void setTagDisabled(t.id, false)}
+                                  className="btn ghost"
+                                  style={{ height: 34, padding: '0 12px', borderRadius: 10, fontSize: 13 }}
+                                >
+                                  重新启用
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDelTarget({ kind: 'tag', id: t.id })}
+                                  className="btn tiny del"
+                                  aria-label={`删除事项 ${t.name}`}
+                                  title="删除事项"
+                                >
+                                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                    <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 新建/修改事项弹窗 */}
       {tagModal && (
@@ -384,7 +548,9 @@ export function TagsPage() {
               />
               {tagDup && (
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#C8203E' }}>
-                  这个模块里已经有同名事项了
+                  {tagDupDisabled
+                    ? '这个模块里已有同名的已停用事项，可直接到右上角「已停用」列表中重新启用'
+                    : '这个模块里已经有同名事项了'}
                 </div>
               )}
             </div>

@@ -63,19 +63,20 @@ export function LauncherPage() {
 
   const lookup = buildTagLookup(modules, tags);
 
-  // 优先按最近使用排序展示最多 8 个常用事项
+  // 优先按最近使用排序展示最多 8 个启用中的常用事项
+  const enabledTagIds = new Set(lookup.enabledTags.map((t) => t.id));
   const orderedTagIds: string[] = [];
   const seen = new Set<string>();
   const sortedSessions = sessions
     .filter((s) => s.deleted_at === null && s.tag_id !== null)
     .sort((a, b) => b.start_at - a.start_at);
   for (const s of sortedSessions) {
-    if (!s.tag_id || seen.has(s.tag_id) || !lookup.tagById.has(s.tag_id)) continue;
+    if (!s.tag_id || seen.has(s.tag_id) || !enabledTagIds.has(s.tag_id)) continue;
     seen.add(s.tag_id);
     orderedTagIds.push(s.tag_id);
     if (orderedTagIds.length >= 8) break;
   }
-  for (const t of lookup.activeTags) {
+  for (const t of lookup.enabledTags) {
     if (seen.has(t.id)) continue;
     seen.add(t.id);
     orderedTagIds.push(t.id);

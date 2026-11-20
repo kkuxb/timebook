@@ -6,6 +6,7 @@ import {
   formatShanghaiTime,
   getPaletteEntry,
   hmToMinutes,
+  isTagDisabled,
   minutesToHm,
   shanghaiDateTimeToUtcMs,
   splitSessionByDay,
@@ -59,6 +60,14 @@ export function SessionEditorModal({ initial, onClose, onSaved }: SessionEditorM
 
   const todayStr = toShanghaiDateStr(nowMs());
   const lookup = buildTagLookup(modules, tags);
+  const selectedTag = tagId ? lookup.tagById.get(tagId) : undefined;
+  const selectedDisabledTag = selectedTag && isTagDisabled(selectedTag) ? selectedTag : undefined;
+  const selectedDisabledMod = selectedDisabledTag
+    ? lookup.moduleById.get(selectedDisabledTag.module_id)
+    : undefined;
+  const selectedDisabledPal = selectedDisabledMod
+    ? getPaletteEntry(selectedDisabledMod.color_key)
+    : null;
 
   const sm = hmToMinutes(startHm);
   const em = hmToMinutes(endHm);
@@ -179,9 +188,36 @@ export function SessionEditorModal({ initial, onClose, onSaved }: SessionEditorM
               未分类
             </button>
           </div>
+          {selectedDisabledTag && selectedDisabledPal && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+              <span style={{ width: 44, fontSize: 12, fontWeight: 700, color: '#9CA3AF' }}>已停用</span>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setTagId(selectedDisabledTag.id)}
+                aria-pressed={true}
+                style={{
+                  height: 36,
+                  padding: '0 12px',
+                  borderRadius: 10,
+                  background: selectedDisabledPal.tint,
+                  boxShadow: `inset 0 0 0 2px ${selectedDisabledPal.color}`,
+                  color: selectedDisabledPal.ink,
+                  fontSize: 13,
+                  fontWeight: 700,
+                }}
+              >
+                <span
+                  style={{ width: 7, height: 7, borderRadius: '50%', background: selectedDisabledPal.color }}
+                />
+                {selectedDisabledMod ? `${selectedDisabledMod.name} · ` : ''}
+                {selectedDisabledTag.name}（已停用）
+              </button>
+            </div>
+          )}
           {lookup.activeModules.map((mod) => {
             const pal = getPaletteEntry(mod.color_key);
-            const mTags = lookup.activeTags.filter((t) => t.module_id === mod.id);
+            const mTags = lookup.enabledTags.filter((t) => t.module_id === mod.id);
             if (mTags.length === 0) return null;
             return (
               <div

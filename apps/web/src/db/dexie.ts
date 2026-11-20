@@ -75,7 +75,7 @@ export async function loadLocalSnapshot(): Promise<LocalSnapshot> {
     cursor: typeof cursorMeta?.value === 'number' ? cursorMeta.value : 0,
     lastSavedAt: typeof savedMeta?.value === 'number' ? savedMeta.value : null,
     modules,
-    tags,
+    tags: tags.map((t) => ({ ...t, disabled_at: t.disabled_at ?? null })),
     sessions,
     todos,
     todoChecks,

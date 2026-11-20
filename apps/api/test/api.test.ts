@@ -321,7 +321,7 @@ describe('@timebook/api integration', () => {
       const jsonRes = await app.request('/api/export?format=json', { headers: { Cookie: cookie } });
       expect(jsonRes.status).toBe(200);
       const jsonExport = (await jsonRes.json()) as { version: string; sessions: Array<{ id: string }> };
-      expect(jsonExport.version).toBe('0.2.0');
+      expect(jsonExport.version).toBe('0.2.1');
       expect(jsonExport.sessions.some((s) => s.id === 'sess-legacy-import-1')).toBe(true);
 
       // 4. 软删除存量导入记录后可在回收站恢复
@@ -465,6 +465,236 @@ describe('@timebook/api integration', () => {
       });
       expect(badBearer.status).toBe(401);
       expect(badBearer.headers.get('access-control-allow-origin')).toBe('http://tauri.localhost');
+    } finally {
+      ctx.close();
+    }
+  });
+
+  it('migrates legacy v0.2.0 SQLite without tags.disabled_at, syncs disable/enable roundtrip, rejects duplicate name (409), and preserves disabled tags in exports', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-api-legacy-'));
+    tempDirs.push(dir);
+    const legacyDbPath = path.join(dir, 'timebook.sqlite');
+
+    // 1. 构造不含 tags.disabled_at 列的旧版 v0.2.0 数据库
+    const legacy = new Database(legacyDbPath);
+    legacy.exec(`
+      CREATE TABLE modules (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        color_key TEXT NOT NULL,
+        sort INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        deleted_at INTEGER
+      );
+      CREATE TABLE tags (
+        id TEXT PRIMARY KEY,
+        module_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        sort INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        deleted_at INTEGER
+      );
+      CREATE TABLE sessions (
+        id TEXT PRIMARY KEY,
+        tag_id TEXT,
+        todo_id TEXT,
+        title TEXT,
+        start_at INTEGER NOT NULL,
+        end_at INTEGER,
+        source TEXT NOT NULL,
+        import_batch TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        deleted_at INTEGER
+      );
+      CREATE TABLE todos (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        tag_id TEXT,
+        plan_date TEXT,
+        due_date TEXT,
+        recur TEXT,
+        done_at INTEGER,
+        sort INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        deleted_at INTEGER
+      );
+    `);
+    const ts = 1_700_000_000_000;
+    legacy
+      .prepare('INSERT INTO modules (id, name, color_key, sort, created_at, updated_at, deleted_at) VALUES (?, ?, ?, 0, ?, ?, NULL)')
+      .run('mod-legacy', '工作', 'blue', ts, ts);
+    legacy
+      .prepare('INSERT INTO tags (id, module_id, name, sort, created_at, updated_at, deleted_at) VALUES (?, ?, ?, 0, ?, ?, NULL)')
+      .run('tag-legacy', 'mod-legacy', '老项目', ts, ts);
+    legacy
+      .prepare('INSERT INTO sessions (id, tag_id, todo_id, title, start_at, end_at, source, import_batch, created_at, updated_at, deleted_at) VALUES (?, ?, NULL, ?, ?, ?, ?, NULL, ?, ?, NULL)')
+      .run('sess-legacy', 'tag-legacy', '老记录', ts + 1000, ts + 3601000, 'timer', ts, ts);
+    legacy.close();
+
+    // 2. 用新版 createDatabase 打开并自动迁移
+    const db = createDatabase(dir);
+    const { app, ctx } = createApp({
+      db,
+      auth: { password: 'pw', secret: 'sec', cookieSecure: 'auto' },
+    });
+    try {
+      const cols = ctx.sqlite.prepare('PRAGMA table_info(tags)').all() as Array<{ name: string }>;
+      expect(cols.some((c) => c.name === 'disabled_at')).toBe(true);
+
+      const loginRes = await app.request('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: 'pw' }),
+      });
+      const cookie = extractCookie(loginRes);
+
+      const sync0 = (await (
+        await app.request('/api/sync?since=0', { headers: { Cookie: cookie } })
+      ).json()) as { tags: Array<{ id: string; disabled_at: number | null }> };
+      expect(sync0.tags.find((t) => t.id === 'tag-legacy')?.disabled_at).toBeNull();
+
+      // 3. 停用标签并验证同步
+      const disabledAt = 1_700_000_100_000;
+      const disableRes = await app.request('/api/mutations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({
+          mutations: [
+            {
+              mutation_id: 'mut-disable-1',
+              type: 'tag.upsert',
+              payload: {
+                id: 'tag-legacy',
+                module_id: 'mod-legacy',
+                name: '老项目',
+                sort: 0,
+                disabled_at: disabledAt,
+              },
+            },
+          ],
+        }),
+      });
+      expect(disableRes.status).toBe(200);
+
+      const syncDisabled = (await (
+        await app.request('/api/sync?since=0', { headers: { Cookie: cookie } })
+      ).json()) as { tags: Array<{ id: string; disabled_at: number | null }> };
+      expect(syncDisabled.tags.find((t) => t.id === 'tag-legacy')?.disabled_at).toBe(disabledAt);
+
+      // 4. 模拟旧版客户端省略 disabled_at 字段更新名称时，不误清空 disabled_at
+      const legacyClientUpdate = await app.request('/api/mutations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({
+          mutations: [
+            {
+              mutation_id: 'mut-legacy-client-rename',
+              type: 'tag.upsert',
+              payload: {
+                id: 'tag-legacy',
+                module_id: 'mod-legacy',
+                name: '老项目改名',
+                sort: 0,
+              },
+            },
+          ],
+        }),
+      });
+      expect(legacyClientUpdate.status).toBe(200);
+      const afterRename = ctx.sqlite
+        .prepare('SELECT disabled_at FROM tags WHERE id = ?')
+        .get('tag-legacy') as { disabled_at: number | null };
+      expect(afterRename.disabled_at).toBe(disabledAt);
+
+      // 5. 同模块下不允许新建与已停用标签同名的事项（409）
+      const dupRes = await app.request('/api/mutations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({
+          mutations: [
+            {
+              mutation_id: 'mut-dup-disabled',
+              type: 'tag.upsert',
+              payload: {
+                id: 'tag-new-dup',
+                module_id: 'mod-legacy',
+                name: '老项目改名',
+                sort: 1,
+              },
+            },
+          ],
+        }),
+      });
+      expect(dupRes.status).toBe(409);
+
+      // 6. 停用期间 CSV 与 JSON 导出均完整保留原标签名与 disabled_at
+      const csvRes = await app.request('/api/export?format=csv', { headers: { Cookie: cookie } });
+      expect(csvRes.status).toBe(200);
+      const csvText = await csvRes.text();
+      expect(csvText).toContain('老项目改名');
+      expect(csvText).toContain('老记录');
+
+      const jsonRes = await app.request('/api/export?format=json', { headers: { Cookie: cookie } });
+      expect(jsonRes.status).toBe(200);
+      const jsonBody = (await jsonRes.json()) as {
+        version: string;
+        tags: Array<{ id: string; disabled_at: number | null }>;
+      };
+      expect(jsonBody.version).toBe('0.2.1');
+      expect(jsonBody.tags.find((t) => t.id === 'tag-legacy')?.disabled_at).toBe(disabledAt);
+
+      // 7. 软删除已停用标签后从回收站恢复仍保留 disabled_at
+      const softDel = await app.request('/api/mutations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({
+          mutations: [
+            { mutation_id: 'mut-del-disabled-tag', type: 'tag.delete', payload: { id: 'tag-legacy', mode: 'drop' } },
+          ],
+        }),
+      });
+      expect(softDel.status).toBe(200);
+      const restoreRes = await app.request('/api/trash/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({ kind: 'tag', id: 'tag-legacy' }),
+      });
+      expect(restoreRes.status).toBe(200);
+      const restoredRow = ctx.sqlite
+        .prepare('SELECT disabled_at, deleted_at FROM tags WHERE id = ?')
+        .get('tag-legacy') as { disabled_at: number | null; deleted_at: number | null };
+      expect(restoredRow.deleted_at).toBeNull();
+      expect(restoredRow.disabled_at).toBe(disabledAt);
+
+      // 8. 重新启用（disabled_at: null）
+      const enableRes = await app.request('/api/mutations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({
+          mutations: [
+            {
+              mutation_id: 'mut-enable-1',
+              type: 'tag.upsert',
+              payload: {
+                id: 'tag-legacy',
+                module_id: 'mod-legacy',
+                name: '老项目改名',
+                sort: 0,
+                disabled_at: null,
+              },
+            },
+          ],
+        }),
+      });
+      expect(enableRes.status).toBe(200);
+      const syncEnabled = (await (
+        await app.request('/api/sync?since=0', { headers: { Cookie: cookie } })
+      ).json()) as { tags: Array<{ id: string; disabled_at: number | null }> };
+      expect(syncEnabled.tags.find((t) => t.id === 'tag-legacy')?.disabled_at).toBeNull();
     } finally {
       ctx.close();
     }

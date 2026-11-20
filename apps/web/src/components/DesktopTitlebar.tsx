@@ -25,6 +25,9 @@ export function DesktopTitlebar() {
       data-tauri-drag-region
       data-testid="desktop-titlebar"
       style={{
+        position: 'sticky',
+        top: 0,
+        zIndex: 25,
         height: 56,
         padding: '0 16px 0 20px',
         display: 'flex',

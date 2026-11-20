@@ -24,6 +24,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       {isDesktop ? (
         <DesktopTitlebar />
       ) : (
+        <div className="tb-header-wrap" data-testid="web-header-sticky">
         <header className="tb-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div
@@ -112,6 +113,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
         </div>
       </header>
+        </div>
       )}
 
       <main className="tb-main" style={isDesktop ? { paddingTop: 20 } : undefined}>

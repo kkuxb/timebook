@@ -477,12 +477,22 @@ select:focus-visible {
 }
 
 /* —— 布局与响应式 —— */
+.tb-header-wrap {
+  position: sticky;
+  top: 0;
+  z-index: 25;
+  width: 100%;
+  background: rgba(246, 247, 250, 0.92);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(232, 234, 241, 0.88);
+}
+
 .tb-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 20px 40px;
+  padding: 14px 40px;
   width: 100%;
   max-width: 1360px;
   margin: 0 auto;
@@ -493,7 +503,7 @@ select:focus-visible {
   width: 100%;
   max-width: 1360px;
   margin: 0 auto;
-  padding: 4px 40px 64px;
+  padding: 20px 40px 64px;
   display: flex;
   flex-direction: column;
 }
@@ -508,7 +518,7 @@ select:focus-visible {
 
 @media (max-width: 767px) {
   .tb-header {
-    padding: 14px 16px;
+    padding: 10px 16px;
     gap: 10px;
   }
 
@@ -517,7 +527,7 @@ select:focus-visible {
   }
 
   .tb-main {
-    padding: 4px 16px 128px;
+    padding: 14px 16px 128px;
   }
 
   .tb-mobile-nav {

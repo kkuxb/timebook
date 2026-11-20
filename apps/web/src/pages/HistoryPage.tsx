@@ -98,7 +98,7 @@ function TagHierarchyMenu({
 
       {lookup.activeModules.map((mod) => {
         const pal = getPaletteEntry(mod.color_key);
-        const mTags = lookup.activeTags.filter((t) => t.module_id === mod.id);
+        const mTags = lookup.enabledTags.filter((t) => t.module_id === mod.id);
         if (mTags.length === 0) return null;
         return (
           <div key={mod.id} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -529,7 +529,7 @@ export function HistoryPage() {
             <option value="all">全部标签</option>
             <option value="unclassified">未分类</option>
             {lookup.activeModules.map((mod) => {
-              const mTags = lookup.activeTags.filter((t) => t.module_id === mod.id);
+              const mTags = lookup.enabledTags.filter((t) => t.module_id === mod.id);
               return (
                 <optgroup key={mod.id} label={mod.name}>
                   <option value={`module:${mod.id}`}>模块：{mod.name}（全部）</option>
@@ -541,6 +541,18 @@ export function HistoryPage() {
                 </optgroup>
               );
             })}
+            {lookup.disabledTags.length > 0 && (
+              <optgroup label="已停用事项">
+                {lookup.disabledTags.map((t) => {
+                  const mod = lookup.moduleById.get(t.module_id);
+                  return (
+                    <option key={t.id} value={`tag:${t.id}`}>
+                      · {mod ? `${mod.name} · ` : ''}{t.name}（已停用）
+                    </option>
+                  );
+                })}
+              </optgroup>
+            )}
           </select>
 
           <div style={{ position: 'relative', flex: '1 1 240px', minWidth: 0 }}>
@@ -811,7 +823,7 @@ export function HistoryPage() {
                           width: 280,
                           maxWidth: '82vw',
                           padding: 12,
-                          zIndex: 25,
+                          zIndex: 30,
                           boxShadow: '0 16px 36px -8px rgba(17, 24, 39, 0.24)',
                         }}
                       >

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   addDays,
   getPaletteEntry,
+  isTagDisabled,
   parseTodoRecur,
   toShanghaiDateStr,
   type TodoEntity,
@@ -68,6 +69,14 @@ export function TodoEditorModal({ todo, onClose }: TodoEditorModalProps) {
 
   const todayStr = toShanghaiDateStr(nowMs());
   const lookup = buildTagLookup(modules, tags);
+  const selectedTag = tagId ? lookup.tagById.get(tagId) : undefined;
+  const selectedDisabledTag = selectedTag && isTagDisabled(selectedTag) ? selectedTag : undefined;
+  const selectedDisabledMod = selectedDisabledTag
+    ? lookup.moduleById.get(selectedDisabledTag.module_id)
+    : undefined;
+  const selectedDisabledPal = selectedDisabledMod
+    ? getPaletteEntry(selectedDisabledMod.color_key)
+    : null;
   const UNSEL = 'inset 0 0 0 1.5px #E1E4EC';
 
   const toggleWeekDay = (d: number) => {
@@ -159,7 +168,26 @@ export function TodoEditorModal({ todo, onClose }: TodoEditorModalProps) {
             >
               未分类
             </button>
-            {lookup.activeTags.map((t) => {
+            {selectedDisabledTag && selectedDisabledPal && (
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setTagId(selectedDisabledTag.id)}
+                style={{
+                  height: 34,
+                  padding: '0 12px',
+                  borderRadius: 10,
+                  fontSize: 13,
+                  background: selectedDisabledPal.tint,
+                  color: selectedDisabledPal.ink,
+                  boxShadow: `inset 0 0 0 2px ${selectedDisabledPal.color}`,
+                }}
+              >
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: selectedDisabledPal.color }} />
+                {selectedDisabledTag.name}（已停用）
+              </button>
+            )}
+            {lookup.enabledTags.map((t) => {
               const mod = lookup.moduleById.get(t.module_id)!;
               const pal = getPaletteEntry(mod.color_key);
               const sel = tagId === t.id;

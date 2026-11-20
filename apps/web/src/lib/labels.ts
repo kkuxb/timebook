@@ -1,7 +1,17 @@
-import { getPaletteEntry, UNCLASSIFIED_STYLE, type ModuleEntity, type SessionEntity, type TagEntity } from '@timebook/core';
+import {
+  getPaletteEntry,
+  isTagDisabled,
+  UNCLASSIFIED_STYLE,
+  type ModuleEntity,
+  type SessionEntity,
+  type TagEntity,
+} from '@timebook/core';
 
 export interface TagLookup {
   activeModules: ModuleEntity[];
+  allTags: TagEntity[];
+  enabledTags: TagEntity[];
+  disabledTags: TagEntity[];
   activeTags: TagEntity[];
   moduleById: Map<string, ModuleEntity>;
   tagById: Map<string, TagEntity>;
@@ -12,11 +22,21 @@ export function buildTagLookup(modules: ModuleEntity[], tags: TagEntity[]): TagL
     .filter((m) => m.deleted_at === null)
     .sort((a, b) => a.sort - b.sort || a.created_at - b.created_at);
   const moduleById = new Map(activeModules.map((m) => [m.id, m]));
-  const activeTags = tags
+  const allTags = tags
     .filter((t) => t.deleted_at === null && moduleById.has(t.module_id))
     .sort((a, b) => a.sort - b.sort || a.created_at - b.created_at);
-  const tagById = new Map(activeTags.map((t) => [t.id, t]));
-  return { activeModules, activeTags, moduleById, tagById };
+  const enabledTags = allTags.filter((t) => !isTagDisabled(t));
+  const disabledTags = allTags.filter((t) => isTagDisabled(t));
+  const tagById = new Map(allTags.map((t) => [t.id, t]));
+  return {
+    activeModules,
+    allTags,
+    enabledTags,
+    disabledTags,
+    activeTags: enabledTags,
+    moduleById,
+    tagById,
+  };
 }
 
 export function getTagStyle(tagId: string | null | undefined, lookup: TagLookup) {

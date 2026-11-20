@@ -181,10 +181,12 @@ export function planLocalToRemoteMerge(
     tagIdMap.set(tag.id, tag.id);
     if (!remoteTagIds.has(tag.id)) {
       remoteTagIds.add(tag.id);
+      const disabledAt = tag.disabled_at ?? null;
       const remappedTag: TagEntity = {
         ...tag,
         module_id: mappedModId,
         name: cleanName,
+        disabled_at: disabledAt,
       };
       mergedTags.push(remappedTag);
       tagMutations.push({
@@ -196,6 +198,7 @@ export function planLocalToRemoteMerge(
           name: cleanName,
           sort: tag.sort,
           created_at: tag.created_at,
+          disabled_at: disabledAt,
         },
       });
     }

@@ -44,9 +44,19 @@ export const TAG_SCHEMA = z.object({
   created_at: z.number().int(),
   updated_at: z.number().int(),
   deleted_at: z.number().int().nullable(),
+  disabled_at: z.number().int().nullable().optional(),
 });
 
 export type TagEntity = z.infer<typeof TAG_SCHEMA>;
+
+/**
+ * 判断事项标签是否处于停用状态（兼容旧数据缺失 disabled_at 为 undefined 的情况）。
+ */
+export function isTagDisabled(
+  tag: Pick<TagEntity, 'disabled_at'> | null | undefined,
+): boolean {
+  return typeof tag?.disabled_at === 'number';
+}
 
 export const SESSION_SCHEMA = z.object({
   id: z.string().min(1),
@@ -121,6 +131,7 @@ export const MUTATION_ITEM_SCHEMA = z.discriminatedUnion('type', [
       name: z.string().min(1),
       sort: z.number().int().optional(),
       created_at: z.number().int().optional(),
+      disabled_at: z.number().int().nullable().optional(),
     }),
   }),
   z.object({

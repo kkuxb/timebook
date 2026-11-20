@@ -34,7 +34,8 @@ CREATE TABLE IF NOT EXISTS tags (
   sort        INTEGER NOT NULL DEFAULT 0,
   created_at  INTEGER NOT NULL,
   updated_at  INTEGER NOT NULL,
-  deleted_at  INTEGER
+  deleted_at  INTEGER,
+  disabled_at INTEGER
 );
 CREATE UNIQUE INDEX IF NOT EXISTS tags_module_name ON tags(module_id, name) WHERE deleted_at IS NULL;
 
@@ -109,7 +110,7 @@ export function createDatabase(dataDirInput?: string): DbContext {
 
   sqlite.exec(INIT_SQL);
 
-  // 升级兼容：存量数据库自动补齐 todos.import_batch 列并建索引
+  // 升级兼容：存量数据库自动补齐 todos.import_batch 与 tags.disabled_at 列并建索引
   const todoCols = sqlite.prepare('PRAGMA table_info(todos)').all() as Array<{ name: string }>;
   if (!todoCols.some((c) => c.name === 'import_batch')) {
     sqlite.exec('ALTER TABLE todos ADD COLUMN import_batch TEXT');
@@ -117,6 +118,11 @@ export function createDatabase(dataDirInput?: string): DbContext {
   sqlite.exec(
     'CREATE INDEX IF NOT EXISTS todos_batch ON todos(import_batch) WHERE import_batch IS NOT NULL',
   );
+
+  const tagCols = sqlite.prepare('PRAGMA table_info(tags)').all() as Array<{ name: string }>;
+  if (!tagCols.some((c) => c.name === 'disabled_at')) {
+    sqlite.exec('ALTER TABLE tags ADD COLUMN disabled_at INTEGER');
+  }
 
   // 初始化游标为全表最大 updated_at
   const maxRow = sqlite

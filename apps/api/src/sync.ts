@@ -103,14 +103,15 @@ export function applyMutationsBatch(
   `);
 
   const upsertTagStmt = sqlite.prepare(`
-    INSERT INTO tags (id, module_id, name, sort, created_at, updated_at, deleted_at)
-    VALUES (?, ?, ?, ?, ?, ?, NULL)
+    INSERT INTO tags (id, module_id, name, sort, created_at, updated_at, deleted_at, disabled_at)
+    VALUES (?, ?, ?, ?, ?, ?, NULL, ?)
     ON CONFLICT(id) DO UPDATE SET
       module_id = excluded.module_id,
       name = excluded.name,
       sort = excluded.sort,
       updated_at = excluded.updated_at,
-      deleted_at = NULL
+      deleted_at = NULL,
+      disabled_at = CASE WHEN ? THEN excluded.disabled_at ELSE tags.disabled_at END
   `);
 
   const upsertSessionStmt = sqlite.prepare(`
@@ -227,7 +228,16 @@ export function applyMutationsBatch(
         if (dup) {
           throw new MutationConflictError(`该模块下已存在同名事项「${cleanName}」`);
         }
-        upsertTagStmt.run(p.id, p.module_id, cleanName, p.sort ?? 0, p.created_at ?? ts, ts);
+        upsertTagStmt.run(
+          p.id,
+          p.module_id,
+          cleanName,
+          p.sort ?? 0,
+          p.created_at ?? ts,
+          ts,
+          p.disabled_at ?? null,
+          p.disabled_at !== undefined ? 1 : 0,
+        );
         break;
       }
       case 'tag.delete': {

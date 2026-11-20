@@ -340,4 +340,60 @@ describe('@timebook/core merge', () => {
     expect(res.tags.find((t) => t.id === 't1')?.module_id).toBe(batch1[1].id);
     expect(res.tags.find((t) => t.id === 't2')?.module_id).toBe(customMod.id);
   });
+
+  it('preserves tag disabled_at in planLocalToRemoteMerge', () => {
+    const ts = 1_700_000_000_000;
+    const localMods = createDefaultModulesSeed(ts);
+    const remoteMods = createDefaultModulesSeed(ts + 5000);
+    const disabledAt = ts + 12345;
+
+    const local: MergeDataset = {
+      modules: localMods,
+      tags: [
+        {
+          id: 'tag-disabled-1',
+          module_id: localMods[0].id,
+          name: '旧项目',
+          sort: 0,
+          created_at: ts,
+          updated_at: disabledAt,
+          deleted_at: null,
+          disabled_at: disabledAt,
+        },
+        {
+          id: 'tag-legacy-undef',
+          module_id: localMods[0].id,
+          name: '新项目',
+          sort: 1,
+          created_at: ts + 1,
+          updated_at: ts + 1,
+          deleted_at: null,
+        },
+      ],
+      todos: [],
+      todoChecks: [],
+      sessions: [],
+    };
+    const remote: MergeDataset = {
+      modules: remoteMods,
+      tags: [],
+      todos: [],
+      todoChecks: [],
+      sessions: [],
+    };
+
+    const plan = planLocalToRemoteMerge(local, remote);
+    const tagUps = plan.mutationsToPush.filter((m) => m.type === 'tag.upsert');
+    expect(tagUps).toHaveLength(2);
+    const disabledUp = tagUps.find((m) => m.payload.id === 'tag-disabled-1');
+    const legacyUp = tagUps.find((m) => m.payload.id === 'tag-legacy-undef');
+    expect(disabledUp?.type === 'tag.upsert' && disabledUp.payload.disabled_at).toBe(disabledAt);
+    expect(legacyUp?.type === 'tag.upsert' && legacyUp.payload.disabled_at).toBeNull();
+    expect(
+      plan.remappedLocalState.tags.find((t) => t.id === 'tag-disabled-1')?.disabled_at,
+    ).toBe(disabledAt);
+    expect(
+      plan.remappedLocalState.tags.find((t) => t.id === 'tag-legacy-undef')?.disabled_at,
+    ).toBeNull();
+  });
 });

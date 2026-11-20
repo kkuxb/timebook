@@ -3,6 +3,7 @@ import { ulid } from 'ulid';
 import {
   dedupeDuplicateModules,
   ensureSingleDefaultModulesSeed,
+  isTagDisabled,
   planLocalToRemoteMerge,
   type ColorKey,
   type ModuleEntity,
@@ -136,7 +137,12 @@ interface AppState {
   deleteModule: (id: string, mode: 'move' | 'drop', targetModuleId?: string) => Promise<void>;
 
   upsertTag: (tag: TagEntity) => Promise<void>;
+  setTagDisabled: (id: string, disabled: boolean) => Promise<void>;
   deleteTag: (id: string, mode: 'move' | 'drop', targetTagId?: string) => Promise<void>;
+}
+
+function normalizeTags(tags: TagEntity[] | undefined): TagEntity[] {
+  return (tags ?? []).map((t) => ({ ...t, disabled_at: t.disabled_at ?? null }));
 }
 
 let flushInFlight: Promise<void> | null = null;
@@ -208,7 +214,8 @@ async function persistDesktopDiskAndTray(opts?: { broadcast?: boolean; wakeWidge
     title: formatSessionDisplayTitle(s, lookup),
   }));
 
-  // 按最近使用时间提取最多 5 个未删常用事项，不足则从 activeTags 补齐
+  // 按最近使用时间提取最多 5 个未删且启用中的常用事项，不足则从 enabledTags 补齐
+  const enabledTagIds = new Set(lookup.enabledTags.map((t) => t.id));
   const recentTagIds: string[] = [];
   const seen = new Set<string>();
   const recentSessions = state.sessions
@@ -216,13 +223,13 @@ async function persistDesktopDiskAndTray(opts?: { broadcast?: boolean; wakeWidge
     .sort((a, b) => b.start_at - a.start_at);
 
   for (const s of recentSessions) {
-    if (!s.tag_id || seen.has(s.tag_id) || !lookup.tagById.has(s.tag_id)) continue;
+    if (!s.tag_id || seen.has(s.tag_id) || !enabledTagIds.has(s.tag_id)) continue;
     seen.add(s.tag_id);
     recentTagIds.push(s.tag_id);
     if (recentTagIds.length >= 5) break;
   }
   if (recentTagIds.length < 5) {
-    for (const tag of lookup.activeTags) {
+    for (const tag of lookup.enabledTags) {
       if (seen.has(tag.id)) continue;
       seen.add(tag.id);
       recentTagIds.push(tag.id);
@@ -364,6 +371,11 @@ function applyOptimisticMutation(
     }
     case 'tag.upsert': {
       const p = payload as unknown as TagEntity;
+      const existingTag = state.tags.find((t) => t.id === p.id);
+      const nextDisabledAt =
+        p.disabled_at !== undefined
+          ? (p.disabled_at ?? null)
+          : (existingTag?.disabled_at ?? null);
       const nextTag: TagEntity = {
         id: p.id,
         module_id: p.module_id,
@@ -372,8 +384,9 @@ function applyOptimisticMutation(
         created_at: p.created_at ?? now,
         updated_at: now,
         deleted_at: null,
+        disabled_at: nextDisabledAt,
       };
-      const exists = state.tags.some((t) => t.id === nextTag.id);
+      const exists = Boolean(existingTag);
       const tags = exists
         ? state.tags.map((t) => (t.id === nextTag.id ? nextTag : t))
         : [...state.tags, nextTag];
@@ -802,7 +815,7 @@ export const useAppStore = create<AppState>((set, get) => ({
                 if (initRes.snapshot && initRes.snapshot.modules.length > 0) {
                   const cleaned = dedupeDuplicateModules(
                     initRes.snapshot.modules,
-                    initRes.snapshot.tags ?? [],
+                    normalizeTags(initRes.snapshot.tags),
                   );
                   await localDb.modules.bulkPut(cleaned.modules);
                   if (cleaned.tags.length) await localDb.tags.bulkPut(cleaned.tags);
@@ -856,7 +869,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           const fallbackSnap = snap.modules.length > 0 ? snap : initRes.snapshot;
           const cleaned = dedupeDuplicateModules(
             fallbackSnap?.modules ?? [],
-            fallbackSnap?.tags ?? [],
+            normalizeTags(fallbackSnap?.tags),
           );
           set({
             modules: cleaned.modules,
@@ -1066,7 +1079,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (initRes.snapshot && initRes.snapshot.modules.length > 0) {
         set({
           modules: initRes.snapshot.modules,
-          tags: initRes.snapshot.tags ?? [],
+          tags: normalizeTags(initRes.snapshot.tags),
           sessions: initRes.snapshot.sessions ?? [],
           todos: initRes.snapshot.todos ?? [],
           todoChecks: initRes.snapshot.todoChecks ?? [],
@@ -1544,7 +1557,18 @@ export const useAppStore = create<AppState>((set, get) => ({
         name: tag.name,
         sort: tag.sort,
         created_at: tag.created_at,
+        disabled_at: tag.disabled_at ?? null,
       },
+    });
+  },
+
+  setTagDisabled: async (id, disabled) => {
+    const tag = get().tags.find((t) => t.id === id && t.deleted_at === null);
+    if (!tag) return;
+    if (isTagDisabled(tag) === disabled) return;
+    await get().upsertTag({
+      ...tag,
+      disabled_at: disabled ? get().nowMs() : null,
     });
   },
 

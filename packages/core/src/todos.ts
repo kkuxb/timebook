@@ -77,6 +77,28 @@ export interface TodoViewItem {
   spentMs: number;
 }
 
+/**
+ * 统一待办视图排序比较器：
+ * 1. 未完成在前、已完成沉底；
+ * 2. 有截止日期在前、无截止日期在后；
+ * 3. 截止日期由近到远（YYYY-MM-DD 升序）；
+ * 4. 同截止日期或均无截止日期按最新创建在前，再用 id 保持确定性。
+ */
+export function compareTodoViewItems(a: TodoViewItem, b: TodoViewItem): number {
+  if (a.done !== b.done) return a.done ? 1 : -1;
+  const da = a.todo.due_date;
+  const db = b.todo.due_date;
+  if (da !== db) {
+    if (da === null) return 1;
+    if (db === null) return -1;
+    return da.localeCompare(db);
+  }
+  if (a.todo.created_at !== b.todo.created_at) {
+    return b.todo.created_at - a.todo.created_at;
+  }
+  return a.todo.id.localeCompare(b.todo.id);
+}
+
 export function getDueLabel(
   dueDate: string | null,
   todayStr: string,
@@ -164,11 +186,7 @@ export function getTodayTodos(
     });
   }
 
-  items.sort((a, b) => {
-    if (a.done !== b.done) return a.done ? 1 : -1;
-    if (a.todo.sort !== b.todo.sort) return a.todo.sort - b.todo.sort;
-    return b.todo.created_at - a.todo.created_at;
-  });
+  items.sort(compareTodoViewItems);
 
   const doneCount = items.filter((it) => it.done).length;
   return { items, doneCount, totalCount: items.length };
@@ -201,12 +219,7 @@ export function getAllPendingTodos(
     });
   }
 
-  items.sort((a, b) => {
-    const pa = a.todo.plan_date ?? '9999-99-99';
-    const pb = b.todo.plan_date ?? '9999-99-99';
-    if (pa !== pb) return pa.localeCompare(pb);
-    return b.todo.created_at - a.todo.created_at;
-  });
+  items.sort(compareTodoViewItems);
 
   return items;
 }

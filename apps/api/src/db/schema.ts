@@ -19,6 +19,7 @@ export const tags = sqliteTable('tags', {
   created_at: integer('created_at').notNull(),
   updated_at: integer('updated_at').notNull(),
   deleted_at: integer('deleted_at'),
+  disabled_at: integer('disabled_at'),
 });
 
 export const sessions = sqliteTable('sessions', {

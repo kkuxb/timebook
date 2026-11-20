@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  compareTodoViewItems,
   computeDayGaps,
   computePeriodStats,
   computeTodayModuleOverview,
@@ -9,6 +10,7 @@ import {
   getPeriodRange,
   getTodayTodos,
   getWeekStart,
+  isTagDisabled,
   isTodoScheduledOn,
   mixWithWhite,
   resolveTodayTimelineAxis,
@@ -296,5 +298,73 @@ describe('@timebook/core todos & recurrence', () => {
     expect(allPending).toHaveLength(2);
     expect(getDueLabel('2026-11-16', '2026-11-16').label).toBe('截止 今天');
     expect(getDueLabel('2026-11-16', '2026-11-18').label).toBe('已过期 2 天');
+  });
+
+  it('sorts both getTodayTodos and getAllPendingTodos by done, due_date asc, null due_date last, created_at desc', () => {
+    const today = '2026-11-20';
+    const doneTodayMs = shanghaiDateTimeToUtcMs(today, 10 * 60);
+    const makeTodo = (
+      id: string,
+      dueDate: string | null,
+      createdAt: number,
+      opts: { planDate?: string | null; doneAt?: number | null; sort?: number } = {},
+    ): TodoEntity => ({
+      id,
+      title: id,
+      tag_id: null,
+      plan_date: opts.planDate ?? null,
+      due_date: dueDate,
+      recur: null,
+      done_at: opts.doneAt ?? null,
+      sort: opts.sort ?? 0,
+      created_at: createdAt,
+      updated_at: createdAt,
+      deleted_at: null,
+    });
+
+    const todos: TodoEntity[] = [
+      makeTodo('no-due-old', null, 100, { sort: 0 }),
+      makeTodo('no-due-new', null, 300, { sort: 99 }),
+      makeTodo('due-future-late', '2026-11-25', 500, { sort: 10 }),
+      makeTodo('due-today-old', '2026-11-20', 100, { sort: 50 }),
+      makeTodo('due-today-new', '2026-11-20', 400, { sort: 60 }),
+      makeTodo('overdue-1d', '2026-11-19', 200, { sort: 80 }),
+      makeTodo('overdue-2d', '2026-11-18', 150, { sort: 90 }),
+      makeTodo('done-today-overdue', '2026-11-18', 900, { doneAt: doneTodayMs }),
+      makeTodo('future-plan-due-tomorrow', '2026-11-21', 250, { planDate: '2026-11-22' }),
+    ];
+
+    const todayList = getTodayTodos(todos, [], [], today, doneTodayMs);
+    expect(todayList.items.map((i) => i.todo.id)).toEqual([
+      'overdue-2d',
+      'overdue-1d',
+      'due-today-new',
+      'due-today-old',
+      'due-future-late',
+      'no-due-new',
+      'no-due-old',
+      'done-today-overdue',
+    ]);
+
+    const pendingList = getAllPendingTodos(todos, [], [], today, doneTodayMs);
+    expect(pendingList.map((i) => i.todo.id)).toEqual([
+      'overdue-2d',
+      'overdue-1d',
+      'due-today-new',
+      'due-today-old',
+      'future-plan-due-tomorrow',
+      'due-future-late',
+      'no-due-new',
+      'no-due-old',
+    ]);
+    expect(compareTodoViewItems(todayList.items[0], todayList.items[7])).toBeLessThan(0);
+  });
+
+  it('checks tag disabled state safely for undefined, null, and timestamp', () => {
+    expect(isTagDisabled(undefined)).toBe(false);
+    expect(isTagDisabled(null)).toBe(false);
+    expect(isTagDisabled({ disabled_at: undefined })).toBe(false);
+    expect(isTagDisabled({ disabled_at: null })).toBe(false);
+    expect(isTagDisabled({ disabled_at: 1700000000000 })).toBe(true);
   });
 });

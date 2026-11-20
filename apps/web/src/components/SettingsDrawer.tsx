@@ -193,7 +193,7 @@ export function SettingsDrawer() {
         triggerBlobDownload(
           `timebook-backup-${dateStr}.json`,
           JSON.stringify(
-            { version: '0.2.0', exportedAt: Date.now(), modules, tags, sessions, todos, todoChecks },
+            { version: '0.2.1', exportedAt: Date.now(), modules, tags, sessions, todos, todoChecks },
             null,
             2,
           ),
