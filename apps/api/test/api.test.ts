@@ -43,9 +43,17 @@ describe('@timebook/api integration', () => {
     try {
       const hRes = await app.request('/api/health');
       expect(hRes.status).toBe(200);
-      const hBody = (await hRes.json()) as { ok: boolean; db: boolean; serverTime: number };
+      const hBody = (await hRes.json()) as {
+        ok: boolean;
+        db: boolean;
+        serverTime: number;
+        version: string;
+        capabilities: string[];
+      };
       expect(hBody.ok).toBe(true);
       expect(hBody.db).toBe(true);
+      expect(hBody.version).toBe('0.2.2');
+      expect(hBody.capabilities).toContain('tag_disabled_at');
 
       const hbRow = ctx.sqlite.prepare('SELECT at FROM heartbeat WHERE id = 1').get() as { at: number };
       expect(hbRow.at).toBe(hBody.serverTime);
@@ -321,7 +329,7 @@ describe('@timebook/api integration', () => {
       const jsonRes = await app.request('/api/export?format=json', { headers: { Cookie: cookie } });
       expect(jsonRes.status).toBe(200);
       const jsonExport = (await jsonRes.json()) as { version: string; sessions: Array<{ id: string }> };
-      expect(jsonExport.version).toBe('0.2.1');
+      expect(jsonExport.version).toBe('0.2.2');
       expect(jsonExport.sessions.some((s) => s.id === 'sess-legacy-import-1')).toBe(true);
 
       // 4. 软删除存量导入记录后可在回收站恢复
@@ -644,7 +652,7 @@ describe('@timebook/api integration', () => {
         version: string;
         tags: Array<{ id: string; disabled_at: number | null }>;
       };
-      expect(jsonBody.version).toBe('0.2.1');
+      expect(jsonBody.version).toBe('0.2.2');
       expect(jsonBody.tags.find((t) => t.id === 'tag-legacy')?.disabled_at).toBe(disabledAt);
 
       // 7. 软删除已停用标签后从回收站恢复仍保留 disabled_at
@@ -695,6 +703,57 @@ describe('@timebook/api integration', () => {
         await app.request('/api/sync?since=0', { headers: { Cookie: cookie } })
       ).json()) as { tags: Array<{ id: string; disabled_at: number | null }> };
       expect(syncEnabled.tags.find((t) => t.id === 'tag-legacy')?.disabled_at).toBeNull();
+
+      // 9. 校验 /api/status 版本与能力标识，以及连续停用后反复增量 sync 不丢失 disabled_at
+      const statusRes = await app.request('/api/status', { headers: { Cookie: cookie } });
+      expect(statusRes.status).toBe(200);
+      const statusJson = (await statusRes.json()) as {
+        version: string;
+        capabilities: string[];
+        cursor: number;
+      };
+      expect(statusJson.version).toBe('0.2.2');
+      expect(statusJson.capabilities).toContain('tag_disabled_at');
+
+      const sinceBefore = statusJson.cursor;
+      const reDisableAt = 1_700_000_200_000;
+      const reDisableRes = await app.request('/api/mutations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({
+          mutations: [
+            {
+              mutation_id: 'mut-disable-again',
+              type: 'tag.upsert',
+              payload: {
+                id: 'tag-legacy',
+                module_id: 'mod-legacy',
+                name: '老项目改名',
+                sort: 0,
+                disabled_at: reDisableAt,
+              },
+            },
+          ],
+        }),
+      });
+      expect(reDisableRes.status).toBe(200);
+      const reDisableJson = (await reDisableRes.json()) as { cursor: number };
+
+      // 多次增量拉取与全量拉取均精确返回 disabled_at
+      const incSync1 = (await (
+        await app.request(`/api/sync?since=${sinceBefore}`, { headers: { Cookie: cookie } })
+      ).json()) as { tags: Array<{ id: string; disabled_at: number | null }>; cursor: number };
+      expect(incSync1.tags.find((t) => t.id === 'tag-legacy')?.disabled_at).toBe(reDisableAt);
+
+      const incSync2 = (await (
+        await app.request(`/api/sync?since=${reDisableJson.cursor}`, { headers: { Cookie: cookie } })
+      ).json()) as { tags: Array<{ id: string; disabled_at: number | null }> };
+      expect(incSync2.tags).toHaveLength(0);
+
+      const fullSyncAfter = (await (
+        await app.request('/api/sync?since=0', { headers: { Cookie: cookie } })
+      ).json()) as { tags: Array<{ id: string; disabled_at: number | null }> };
+      expect(fullSyncAfter.tags.find((t) => t.id === 'tag-legacy')?.disabled_at).toBe(reDisableAt);
     } finally {
       ctx.close();
     }

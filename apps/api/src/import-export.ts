@@ -20,7 +20,7 @@ export function exportDatabaseJson(ctx: DbContext) {
 
   return {
     exportedAt: Date.now(),
-    version: '0.2.1',
+    version: '0.2.2',
     modules,
     tags,
     sessions,

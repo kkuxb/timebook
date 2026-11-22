@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { ulid } from 'ulid';
 import {
   dedupeDuplicateModules,
+  detectLegacyTagDisableIgnored,
   ensureSingleDefaultModulesSeed,
   isTagDisabled,
   planLocalToRemoteMerge,
@@ -148,6 +149,10 @@ function normalizeTags(tags: TagEntity[] | undefined): TagEntity[] {
 let flushInFlight: Promise<void> | null = null;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let retryAttempt = 0;
+let localMutationEpoch = 0;
+
+const LEGACY_TAG_DISABLE_BANNER =
+  '停用标签未在家庭 NAS 服务端生效：当前连接的 NAS 容器镜像版本过旧，请先将 NAS 端的 Timebook 镜像更新到最新版（v0.2.2+）';
 
 function clearRetryTimer() {
   if (retryTimer !== null) {
@@ -644,8 +649,12 @@ function scheduleRetry() {
   }, delay);
 }
 
-async function pullSyncDelta(full = false): Promise<void> {
+async function pullSyncDelta(full = false): Promise<SyncResponse | null> {
   const state = useAppStore.getState();
+  if (!full && (await localDb.pendingMutations.count()) > 0) {
+    return null;
+  }
+  const epochBefore = localMutationEpoch;
   const since = full ? 0 : state.syncCursor;
   const res = await apiFetch(`/api/sync?since=${since}`);
   if (res.status === 401) {
@@ -657,12 +666,18 @@ async function pullSyncDelta(full = false): Promise<void> {
         lastError: 'NAS 会话已过期，请在设置中重新连接验证',
       });
     }
-    return;
+    return null;
   }
   if (!res.ok) {
     throw new Error(`同步接口异常 (${res.status})`);
   }
   const data = (await res.json()) as SyncResponse & { runningSessionIds?: string[] };
+
+  // 若拉取过程中本地发生了新的乐观写入或仍存在未冲刷变更，放弃本次过期快照以免覆盖本地最新状态
+  if (localMutationEpoch !== epochBefore || (!full && (await localDb.pendingMutations.count()) > 0)) {
+    return null;
+  }
+
   if (full) {
     await persistFullSync(data);
   } else {
@@ -680,13 +695,14 @@ async function pullSyncDelta(full = false): Promise<void> {
     todoChecks: snap.todoChecks,
     syncCursor: snap.cursor,
     pendingCount: snap.pending.length,
-    clockOffsetMs: data.serverTime - Date.now(),
+    clockOffsetMs: Math.trunc(data.serverTime - Date.now()),
     lastSavedAt: savedAt,
   });
 
   if (state.isDesktop) {
     await persistDesktopDiskAndTray({ broadcast: true });
   }
+  return data;
 }
 
 async function fetchStatusMeta(): Promise<void> {
@@ -708,6 +724,7 @@ async function commitSessionBatch(
   set: (partial: Partial<AppState>) => void,
   get: () => AppState,
 ): Promise<void> {
+  localMutationEpoch += 1;
   const isLocalDesktop =
     get().isDesktop && get().desktopConfig?.connectionMode === 'local';
 
@@ -788,7 +805,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setActiveTab: (activeTab) => set({ activeTab }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   dismissErrorBanner: () => set({ errorBanner: null }),
-  nowMs: () => Date.now() + get().clockOffsetMs,
+  nowMs: () => Math.trunc(Date.now() + get().clockOffsetMs),
 
   init: async () => {
     const isDesktop = isDesktopEnvironment();
@@ -1034,7 +1051,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
 
       if (typeof hBody.serverTime === 'number') {
-        set({ clockOffsetMs: hBody.serverTime - Date.now() });
+        set({ clockOffsetMs: Math.trunc(hBody.serverTime - Date.now()) });
       }
 
       const flushed = await flushPendingQueue();
@@ -1150,6 +1167,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   connectToNas: async (rawUrl: string, password: string) => {
+    localMutationEpoch += 1;
     const serverUrl = normalizeServerUrl(rawUrl);
     if (!serverUrl) {
       return { ok: false, error: '请先填写 NAS 服务地址' };
@@ -1289,17 +1307,30 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   enqueueMutation: async (item) => {
+    localMutationEpoch += 1;
     const mutation_id = ulid();
     const now = get().nowMs();
     const { patch, dbTasks } = applyOptimisticMutation(get(), item, now);
     const isLocalDesktop =
       get().isDesktop && get().desktopConfig?.connectionMode === 'local';
+    const isTimerMutation =
+      item.type === 'session.upsert' || item.type === 'session.cancel_running';
     const wakeWidget = item.type === 'session.upsert';
+    const payloadObj = (item.payload ?? {}) as Record<string, unknown>;
+    const isExplicitTagDisableChange =
+      item.type === 'tag.upsert' &&
+      Object.prototype.hasOwnProperty.call(payloadObj, 'disabled_at');
+    const targetTagId =
+      isExplicitTagDisableChange && typeof payloadObj.id === 'string' ? payloadObj.id : null;
+    const expectedDisabled =
+      isExplicitTagDisableChange && typeof payloadObj.disabled_at === 'number';
 
     if (isLocalDesktop) {
       const savedAt = Date.now();
       set({ ...patch, pendingCount: 0, syncStatus: 'ok', lastSavedAt: savedAt, lastError: null });
-      emitFastRunningBroadcast(wakeWidget);
+      if (isTimerMutation) {
+        emitFastRunningBroadcast(wakeWidget);
+      }
       await Promise.all([
         ...dbTasks,
         localDb.meta.put({ key: 'lastSavedAt', value: savedAt }),
@@ -1312,7 +1343,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     set({ ...patch, pendingCount: get().pendingCount + 1, syncStatus: 'saving' });
-    emitFastRunningBroadcast(wakeWidget);
+    if (isTimerMutation) {
+      emitFastRunningBroadcast(wakeWidget);
+    }
 
     await Promise.all([
       ...dbTasks,
@@ -1337,9 +1370,30 @@ export const useAppStore = create<AppState>((set, get) => ({
     const ok = await flushPendingQueue();
     if (ok && get().authState === 'authenticated') {
       try {
-        await pullSyncDelta(false);
+        const syncData = await pullSyncDelta(false);
         if ((await localDb.pendingMutations.count()) === 0) {
           set({ syncStatus: 'ok', pendingCount: 0, lastError: null });
+        }
+
+        if (isExplicitTagDisableChange && targetTagId && syncData) {
+          let rawRemoteTag = (syncData.tags as unknown as Array<Record<string, unknown>>)?.find(
+            (t) => t.id === targetTagId,
+          );
+          if (!rawRemoteTag) {
+            const fullRes = await apiFetch('/api/sync?since=0').catch(() => null);
+            if (fullRes?.ok) {
+              const fullJson = (await fullRes.json().catch(() => null)) as {
+                tags?: Array<Record<string, unknown>>;
+              } | null;
+              rawRemoteTag = fullJson?.tags?.find((t) => t.id === targetTagId);
+            }
+          }
+          if (detectLegacyTagDisableIgnored(rawRemoteTag, expectedDisabled)) {
+            set({
+              errorBanner: LEGACY_TAG_DISABLE_BANNER,
+              lastError: LEGACY_TAG_DISABLE_BANNER,
+            });
+          }
         }
       } catch {
         set({ syncStatus: 'offline' });
@@ -1568,7 +1622,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (isTagDisabled(tag) === disabled) return;
     await get().upsertTag({
       ...tag,
-      disabled_at: disabled ? get().nowMs() : null,
+      disabled_at: disabled ? Math.trunc(get().nowMs()) : null,
     });
   },
 

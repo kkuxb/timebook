@@ -90,7 +90,13 @@ export function createApp(options: CreateAppOptions = {}) {
           503,
         );
       }
-      return c.json({ ok: true, db: true, serverTime });
+      return c.json({
+        ok: true,
+        db: true,
+        serverTime,
+        version: '0.2.2',
+        capabilities: ['tag_disabled_at'],
+      });
     } catch (err) {
       return c.json(
         {
@@ -155,6 +161,8 @@ export function createApp(options: CreateAppOptions = {}) {
     return c.json({
       ok: true,
       serverTime: Date.now(),
+      version: '0.2.2',
+      capabilities: ['tag_disabled_at'],
       cursor: ctx.getLastCursor(),
       backup,
     });

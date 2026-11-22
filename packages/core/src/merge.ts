@@ -298,3 +298,27 @@ export function planLocalToRemoteMerge(
     tagIdMap: Object.fromEntries(tagIdMap),
   };
 }
+
+/**
+ * 检测远端服务端返回的标签对象是否表明其为不支持 disabled_at 或静默丢弃停用状态的旧版服务端。
+ * - 若未返回目标记录（null/undefined）返回 false；
+ * - 若对象缺少 'disabled_at' 属性键，说明旧版服务端未包含该字段，返回 true；
+ * - 若期望停用（expectedDisabled === true）但服务端返回的 disabled_at 不是有效数字，返回 true；
+ * - 其余情况（包含新版重新启用返回 disabled_at: null）返回 false。
+ */
+export function detectLegacyTagDisableIgnored(
+  rawRemoteTag: Record<string, unknown> | null | undefined,
+  expectedDisabled: boolean,
+): boolean {
+  if (!rawRemoteTag) return false;
+  if (!Object.prototype.hasOwnProperty.call(rawRemoteTag, 'disabled_at')) {
+    return true;
+  }
+  if (expectedDisabled) {
+    const val = rawRemoteTag.disabled_at;
+    if (typeof val !== 'number' || !Number.isFinite(val)) {
+      return true;
+    }
+  }
+  return false;
+}

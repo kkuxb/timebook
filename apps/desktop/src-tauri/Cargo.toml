@@ -1,6 +1,6 @@
 [package]
 name = "timebook-desktop"
-version = "0.2.1"
+version = "0.2.2"
 description = "时间簿（Timebook）Windows 轻量桌面版"
 authors = ["Timebook"]
 edition = "2021"

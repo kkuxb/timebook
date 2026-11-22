@@ -204,6 +204,58 @@ select:focus-visible {
   font-weight: 800;
 }
 
+/* —— 模块分组标签胶囊与快捷待办小标签 —— */
+.tag-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  font-weight: 800;
+  white-space: nowrap;
+  transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.16s, background-color 0.16s;
+}
+
+.tag-pill-btn:hover:not(:disabled) {
+  transform: translateY(-1.5px);
+}
+
+.tag-pill-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.todo-mini-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 31px;
+  max-width: 220px;
+  padding: 0 11px;
+  border-radius: var(--tb-r-pill);
+  border: 1px solid var(--tb-input-line);
+  background: #FFFFFF;
+  color: var(--tb-ink);
+  font-size: 12.5px;
+  font-weight: 700;
+  transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), background-color 0.16s, border-color 0.16s, box-shadow 0.16s;
+}
+
+.todo-mini-tag:hover:not(:disabled) {
+  transform: translateY(-1.5px);
+  background: var(--tb-yellow);
+  border-color: #EAB308;
+  box-shadow: 0 6px 14px -8px rgba(214, 160, 0, 0.85);
+}
+
+.todo-mini-tag:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.todo-mini-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* —— 时间线与空档 —— */
 .row {
   border: 0;

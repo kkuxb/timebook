@@ -24,6 +24,7 @@ import {
   SessionEditorModal,
   type SessionEditorInitial,
 } from '../components/SessionEditorModal.js';
+import { StartFocusModal } from '../components/StartFocusModal.js';
 import { TagPickerModal } from '../components/TagPickerModal.js';
 import { TodoEditorModal } from '../components/TodoEditorModal.js';
 import { buildTagLookup, formatSessionDisplayTitle, getTagStyle } from '../lib/labels.js';
@@ -48,6 +49,7 @@ export function TodayPage() {
   const [todoView, setTodoView] = useState<'today' | 'all'>('today');
   const [draftTodo, setDraftTodo] = useState('');
   const [viewDate, setViewDate] = useState(() => toShanghaiDateStr(nowMs()));
+  const [startModalOpen, setStartModalOpen] = useState(false);
   const [pickerSessionId, setPickerSessionId] = useState<string | null>(null);
   const [sessionEditor, setSessionEditor] = useState<SessionEditorInitial | null>(null);
   const [editingTodo, setEditingTodo] = useState<TodoEntity | null>(null);
@@ -75,9 +77,8 @@ export function TodayPage() {
       ? todayTodoResult.items
       : getAllPendingTodos(todos, todoChecks, sessions, todayStr, nowTick);
 
-  const handleStartFocus = async () => {
-    const newId = await startTimer({ tagId: null, title: null });
-    setPickerSessionId(newId);
+  const handleStartFocus = () => {
+    setStartModalOpen(true);
   };
 
   const handleAddTodo = async (e: FormEvent) => {
@@ -262,7 +263,8 @@ export function TodayPage() {
 
         <button
           type="button"
-          onClick={() => void handleStartFocus()}
+          onClick={handleStartFocus}
+          data-testid="today-start-focus-btn"
           className="btn primary"
           style={{ height: 56, padding: '0 30px', borderRadius: 16, fontSize: 17 }}
         >
@@ -1019,6 +1021,15 @@ export function TodayPage() {
           </span>
         </button>
       )}
+
+      <StartFocusModal
+        open={startModalOpen}
+        onConfirm={async ({ tagId, title }) => {
+          await startTimer({ tagId, title });
+          setStartModalOpen(false);
+        }}
+        onCancel={() => setStartModalOpen(false)}
+      />
 
       <TagPickerModal
         open={!!pickerSessionId && !!pickerTargetSession}

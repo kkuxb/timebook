@@ -5,6 +5,7 @@ import {
   computePeriodStats,
   computeTodayModuleOverview,
   computeTodoSpentMs,
+  detectLegacyTagDisableIgnored,
   getAllPendingTodos,
   getDueLabel,
   getPeriodRange,
@@ -366,5 +367,19 @@ describe('@timebook/core todos & recurrence', () => {
     expect(isTagDisabled({ disabled_at: undefined })).toBe(false);
     expect(isTagDisabled({ disabled_at: null })).toBe(false);
     expect(isTagDisabled({ disabled_at: 1700000000000 })).toBe(true);
+  });
+
+  it('detects legacy server ignoring tag disable state without false positives on re-enable', () => {
+    expect(detectLegacyTagDisableIgnored(undefined, true)).toBe(false);
+    expect(detectLegacyTagDisableIgnored(null, true)).toBe(false);
+    // 旧版服务端响应缺少 disabled_at 键
+    expect(detectLegacyTagDisableIgnored({ id: 't1', name: '个人工作' }, true)).toBe(true);
+    expect(detectLegacyTagDisableIgnored({ id: 't1', name: '个人工作' }, false)).toBe(true);
+    // 期望停用但服务端静默丢弃（返回 null 或 undefined）
+    expect(detectLegacyTagDisableIgnored({ id: 't1', disabled_at: null }, true)).toBe(true);
+    expect(detectLegacyTagDisableIgnored({ id: 't1', disabled_at: undefined }, true)).toBe(true);
+    // 新版服务端正常停用与重新启用
+    expect(detectLegacyTagDisableIgnored({ id: 't1', disabled_at: 1700000000000 }, true)).toBe(false);
+    expect(detectLegacyTagDisableIgnored({ id: 't1', disabled_at: null }, false)).toBe(false);
   });
 });

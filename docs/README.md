@@ -2,7 +2,7 @@
 
 - **项目标识（`slug`）**：`timebook`
 - **开源仓库**：`https://github.com/kkuxb/timebook`
-- **当前正式发布版本**：**`v0.2.1`**（2026-11-20 用户确认收口，在 `v0.2.0` 基础上完成顶部导航栏常驻吸顶、待办双视图按截止时间统一排序、二级事项标签无损停用与重新启用及旧版数据结构自动兼容升级）
+- **当前正式发布版本**：**`v0.2.2`**（2026-11-22 用户确认收口，完成今日页「开始专注」填写内容与按一级模块选标签确认起表、灵动胶囊「新建专注」双操作快捷选框及标签停用持久生效与旧版 `NAS` 升级提醒加固）
 
 ---
 
@@ -31,18 +31,21 @@
 > 说明：内部研发期间按两期里程碑推进（一期全栈与容器版内部代号 `v1.0.0`，二期 `Windows` 桌面版内部代号 `v1.1.0`），最终统一收敛并以 **`v0.1.0`** 正式开源发布。
 
 - **正式收口验收记录**：
-  - **[v0.2.1 小修迭代版验证与验收记录](deliveries/timebook-v0.2.1-acceptance.md)**（2026-11-20 最终收口基线）
+  - **[v0.2.2 迭代版验证与验收记录](deliveries/timebook-v0.2.2-acceptance.md)**（2026-11-22 最终收口基线）
+  - [v0.2.1 小修迭代版验证与验收记录](deliveries/timebook-v0.2.1-acceptance.md)
   - [v0.2.0 迭代版验证与验收记录](deliveries/timebook-v0.2.0-acceptance.md)
   - [v0.1.0 开源首发版验证与验收记录](deliveries/timebook-v0.1.0-acceptance.md)
   - [一期全栈版阶段验收记录](deliveries/timebook-v1.0.0-acceptance.md)
 - **需求澄清与确认纪要**：
-  - [需求澄清与讨论纪要](requirements/timebook-讨论纪要.md)（`C-01`～`C-21` 全部已确认冻结）
+  - [需求澄清与讨论纪要](requirements/timebook-讨论纪要.md)（`C-01`～`C-25` 全部已确认冻结）
 - **冻结设计、实施计划与测试计划**：
+  - `v0.2.2` 专注发起与停用稳定性迭代：[设计方案](designs/timebook-v0.2.2-design.md) ｜ [实施计划](designs/timebook-v0.2.2-implementation-plan.md) ｜ [测试计划](designs/timebook-v0.2.2-test-plan.md)
   - `v0.2.1` 小修迭代版：[设计方案](designs/timebook-v0.2.1-design.md) ｜ [实施计划](designs/timebook-v0.2.1-implementation-plan.md) ｜ [测试计划](designs/timebook-v0.2.1-test-plan.md)
   - `v0.2.0` 迭代版：[设计方案](designs/timebook-v0.2.0-design.md) ｜ [实施计划](designs/timebook-v0.2.0-implementation-plan.md) ｜ [测试计划](designs/timebook-v0.2.0-test-plan.md)
   - 一期全栈与 `NAS` 版：[设计方案](designs/timebook-v1.0.0-design.md) ｜ [实施计划](designs/timebook-v1.0.0-implementation-plan.md) ｜ [测试计划](designs/timebook-v1.0.0-test-plan.md)
   - 二期 `Windows` 桌面版：[设计方案](designs/timebook-v1.1.0-design.md) ｜ [R4 热修补充简报](designs/timebook-v1.1.0-R4-hotfix-supplement.md) ｜ [实施计划](designs/timebook-v1.1.0-implementation-plan.md) ｜ [测试计划](designs/timebook-v1.1.0-test-plan.md)
 - **独立隔离盲测报告**：
+  - `v0.2.2` 专注发起与停用稳定性迭代：[R1 收口报告](deliveries/timebook-v0.2.2-R1-test-report.md)
   - `v0.2.1` 小修迭代版：[R1 收口报告](deliveries/timebook-v0.2.1-R1-test-report.md)
   - `v0.2.0` 迭代版：[R1 收口报告](deliveries/timebook-v0.2.0-R1-test-report.md)
   - 一期全栈版：[R1 报告](deliveries/timebook-v1.0.0-R1-test-report.md) ｜ [R2 收口报告](deliveries/timebook-v1.0.0-R2-test-report.md)
